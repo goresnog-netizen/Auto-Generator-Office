@@ -37,6 +37,7 @@ Jalankan "Typecheck (server)" "npx" @("tsc", "--noEmit", "-p", "tsconfig.server.
 Jalankan "Unit test" "npx" @("vitest", "run", "--reporter=dot")
 Jalankan "Bridge DeckCraft (Node)" "node" @("scripts/verify-deckcraft.mts")
 Jalankan "Generator Node (tulis file nyata)" "node" @("scripts/verifikasi-generators.mjs")
+Jalankan "Audit isi generator (konten bermakna)" "node" @("scripts/audit-isi-generator.mjs")
 Jalankan "Id perintah vs engine" "node" @("scripts/verifikasi-perintah.mjs")
 Jalankan "Isi PPTX" "node" @("scripts/verifikasi-pptx.mjs")
 

@@ -382,10 +382,15 @@ export class PDFGenerator implements DocumentGenerator {
       // `bufferedPageRange().start` memberi nomor halaman pertama yang
       // masih ada di buffer.
       doc.switchToPage(pages.start + i);
+      // Y harus DI DALAM area teks (page.maxY = tinggi halaman - margin bawah).
+      // Kalau ditulis di bawah `maxY` (mis. page.height - 50 saat margin bawah
+      // 72), pdfkit otomatis menambah halaman kosong baru — hasilnya jumlah
+      // halaman dobel dan nomor halaman salah (2 halaman jadi 4).
+      const y = doc.page.maxY() - 20;
       doc.fontSize(9)
          .font('Helvetica')
          .fillColor('#9E9E9E')
-         .text(`${i + 1} / ${pageCount}`, 0, doc.page.height - 50, {
+         .text(`${i + 1} / ${pageCount}`, 0, y, {
            align: 'center'
          });
     }

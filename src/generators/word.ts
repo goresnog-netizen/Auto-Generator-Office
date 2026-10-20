@@ -145,7 +145,7 @@ export class WordGenerator implements DocumentGenerator {
               ],
             },
             {
-              reference: REFERENCE_TANPA_URUTAN,
+              reference: "tidak-terdaftar",
               levels: [
                 {
                   level: 0,

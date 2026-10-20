@@ -25,6 +25,7 @@
     "verify:auto-generate": "node scripts/verifikasi-auto-generate.mjs",
     "verify:pptx-generator": "node scripts/verifikasi-pptx-generator.mjs",
     "verify:generators": "node scripts/verifikasi-generators.mjs",
+    "audit:generators": "node scripts/audit-isi-generator.mjs",
     "verify:backdrop": "node scripts/verifikasi-backdrop.mjs",
     "verify:performa": "node scripts/verifikasi-performa.mjs",
     "verify:all": "powershell -ExecutionPolicy Bypass -File scripts/verifikasi-semua.ps1",

@@ -26,6 +26,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { inflateSync } from "node:zlib";
 
 const require = createRequire(import.meta.url);
 
@@ -188,6 +189,55 @@ function daftarIsiZip(zipPath) {
   return { target, hasil };
 }
 
+/**
+ * Ekstrak teks dari PDF.
+ *
+ * PDFKit menulis teks sebagai glyph hex (`<4a> 20 <7564…> TJ`) di dalam
+ * content stream yang dikompresi Flate. Script ini.inflate stream-nya lalu
+ * decode array TJ menjadi teks biasa, supaya isi dokumen bisa diperiksa —
+ * bukan cuma header/footer berkas.
+ *
+ * @param {string} pdfPath path berkas PDF
+ * @returns {string} teks yang bisa dibaca
+ */
+function teksDariPdf(pdfPath) {
+  const buf = readFileSync(pdfPath);
+  const latin = buf.toString("latin1");
+  const stream = [];
+
+  let i = 0;
+  while (true) {
+    const s = latin.indexOf("stream", i);
+    if (s < 0) break;
+    let mulai = s + 6;
+    if (latin[mulai] === "\r") mulai++;
+    if (latin[mulai] === "\n") mulai++;
+    const e = latin.indexOf("endstream", mulai);
+    if (e < 0) break;
+    try {
+      stream.push(inflateSync(buf.subarray(mulai, e)).toString("latin1"));
+    } catch {
+      /* bukan stream Flate (mis. font) — abaikan */
+    }
+    i = e + 9;
+  }
+
+  let teks = "";
+  for (const m of stream.join("\n").matchAll(/\[([^\]]*)\]\s*TJ/g)) {
+    for (const h of m[1].matchAll(/<([0-9A-Fa-f]*)>/g)) {
+      const hex = h[1];
+      for (let k = 0; k + 1 < hex.length; k += 2) {
+        teks += String.fromCharCode(parseInt(hex.slice(k, k + 2), 16));
+      }
+    }
+    for (const lit of m[1].matchAll(/\(([^)]*)\)/g)) {
+      teks += lit[1];
+    }
+    teks += "\n";
+  }
+  return teks;
+}
+
 try {
   // ---------- WORD ----------
   {
@@ -246,6 +296,24 @@ try {
       hasil.some((f) => /^xl\/worksheets\/sheet\d+\.xml$/.test(f)),
       hasil.filter((f) => f.includes("worksheets")).join(", "),
     );
+    // Isi sel harus TEKS ASLI, bukan JSON hasil stringifikasi objek
+    // (exceljs v4 tidak mengenali `{ text, font }` sebagai nilai sel).
+    const { target: tx } = daftarIsiZip(target);
+    const sharedPath = path.join(tx, "xl", "sharedStrings.xml");
+    if (existsSync(sharedPath)) {
+      const shared = readFileSync(sharedPath, "utf8");
+      cek(
+        "xlsx: isi sel berupa teks asli (bukan JSON mentah)",
+        !shared.includes("&quot;text&quot;") && !shared.includes('{\\"'),
+        shared.length > 0 ? `${shared.length} byte sharedStrings` : "",
+      );
+      cek(
+        "xlsx: teks dokumen benar-benar tersimpan",
+        shared.includes("Paragraf pengujian"),
+      );
+    } else {
+      cek("xlsx: isi sel berupa teks asli (bukan JSON mentah)", false, "sharedStrings.xml tidak ada");
+    }
   }
 
   // ---------- PDF ----------
@@ -264,6 +332,44 @@ try {
     cek("pdf: ukuran > 1 KB", ukuran > 1024, `${ukuran} byte`);
     const kepala = readFileSync(target).subarray(0, 5).toString("latin1");
     cek("pdf: header %PDF valid", kepala.startsWith("%PDF"), kepala);
+    // PDF harus tertutup penanda %%EOF dan punya minimal satu objek halaman.
+    const isiPdf = readFileSync(target).toString("latin1");
+    cek(
+      "pdf: ditutup penanda %%EOF",
+      isiPdf.trimEnd().endsWith("%%EOF"),
+      isiPdf.trimEnd().slice(-8),
+    );
+    const jumlahHalaman = (isiPdf.match(/\/Type\s*\/Page[^s]/g) || []).length;
+    cek("pdf: punya minimal satu halaman", jumlahHalaman > 0, `${jumlahHalaman} halaman`);
+    // Teks dokumen harus benar-benar ada di dalam PDF (bukan PDF kosong).
+    const teksPdf = teksDariPdf(target);
+    cek(
+      "pdf: teks dokumen tersimpan di dalam PDF",
+      teksPdf.includes("Laporan Uji") && teksPdf.includes("Paragraf pengujian"),
+      JSON.stringify(teksPdf.slice(0, 80)),
+    );
+    cek(
+      "pdf: nomor halaman tercetak",
+      /\d+\s*\/\s*\d+/.test(teksPdf),
+      (teksPdf.match(/\d+\s*\/\s*\d+/g) || []).join(", "),
+    );
+    // Nomor halaman harus konsisten dengan jumlah halaman sebenarnya.
+    // Pdfkit menambah halaman kosong otomatis kalau nomor halaman ditulis
+    // di bawah margin bawah — gejalanya: /Count jadi 2x jumlah halaman.
+    const label = (teksPdf.match(/(\d+)\s*\/\s*(\d+)/g) || []).map((s) =>
+      s.split("/").map((x) => parseInt(x.trim(), 10)),
+    );
+    const totalLabel = label.length ? label[0][1] : 0;
+    cek(
+      "pdf: jumlah nomor halaman = jumlah halaman nyata",
+      totalLabel > 0 && totalLabel === jumlahHalaman,
+      `label ${totalLabel} vs /Type/Page ${jumlahHalaman}`,
+    );
+    cek(
+      "pdf: semua halaman bernomor",
+      label.length === jumlahHalaman,
+      `${label.length} label untuk ${jumlahHalaman} halaman`,
+    );
   }
 
   // ---------- DIAGRAM ----------
@@ -287,6 +393,13 @@ try {
     cek("diagram: berkas ada", existsSync(target));
     const isi = readFileSync(target, "utf8");
     cek("diagram: isi SVG/mermaid", isi.length > 20, `${isi.length} karakter`);
+    // Hasil render Mermaid berisi node/edge; sumber .mmd mentah tidak.
+    // Kalau hanya .mmd, generator gagal render (fallback), bukan gambar.
+    cek(
+      "diagram: benar-benar ter-render (bukan sumber .mmd)",
+      isi.includes("<svg") && /<(g|path|rect|circle|polygon)\b/.test(isi),
+      isi.includes("<svg") ? "SVG dengan elemen render" : "bukan SVG",
+    );
   }
 
   // ---------- PPTX ----------

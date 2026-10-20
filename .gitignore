@@ -46,6 +46,7 @@ scripts/*
 !scripts/verifikasi-performa.mjs
 !scripts/verifikasi-pptx-generator.mjs
 !scripts/verifikasi-generators.mjs
+!scripts/audit-isi-generator.mjs
 !scripts/ukur-warna.py
 !scripts/ukur-biaya-blur.mjs
 !scripts/verifikasi-semua.ps1

@@ -154,13 +154,33 @@ tertanam.
 - Toggle "Ganti kanvas / Tambahkan" di panel Auto-Generate.
 - Mode "Tambahkan" menyambung hasil di akhir isi yang ada; judul tak diubah.
 
-### 6. Typecheck
-- `src/generators/`: 127 → 116 error (diagram.ts & pptx.ts sudah bersih;
-  word/pdf/xlsx dikerjakan terpisah).
+### 6. Typecheck — SEMUA generator bersih
+- `src/generators/`: **127 → 0 error**. pptx, word, pdf, xlsx, diagram +
+  `src/index.ts` + `src/types/index.ts` semuanya bersih.
+- Import `../types` → `../types/index.ts` (ESM tak mendukung directory import).
+
+Bug runtime yang tak terlihat tsc, ditemukan lewat smoke test:
+- **pdf.ts**: tanpa `bufferPages: true`, `switchToPage()` melempar
+  "out of bounds" → `generate()` selalu gagal, tak menulis apa pun.
+  `switchToPage(pages.start + i)` juga wajib (indeks absolut).
+- **xlsx.ts**: exceljs v4 tak kenal objek `{text, font}` sebagai nilai sel →
+  jatuh ke tipe JSON, konten praktis hilang. Diganti: nilai primitif +
+  gaya via `cell.font`/`cell.fill`/`cell.alignment`, warna `argb`.
+- **word.ts**: numbering wajib didaftarkan di
+  `Document({numbering:{config:[...]}})` — tanpa itu docx menulis
+  `numId="{list-tanpa-urutan-0}"` dan .docx rusak di Word. `bullet:` dan
+  `numbering:` tak boleh dipakai bersamaan (dua `<w:numPr>`).
+
+Diverifikasi `scripts/verifikasi-generators.mjs` (31 pemeriksaan) +
+`scripts/audit-isi-generator.mjs` (16 pemeriksaan — isi dokumen dibaca &
+dicek kata kuncinya, bukan cuma valid secara struktural):
+- word .docx 10.133 B (memuat "Laporan Uji", "Poin satu", "nilai 1", "const a = 1")
+- xlsx .xlsx 10.404 B (7 sheet, sharedStrings berisi teks asli)
+- pdf .pdf 3.330 B (3 halaman, header %PDF, %%EOF)
+- diagram .svg 10.468 B (ter-render, bukan sumber .mmd)
+- pptx 5 slide + tabel native + teks benar
 
 ## Yang belum selesai
-- `src/generators/word.ts`, `pdf.ts`, `xlsx.ts` masih punya error tipe
-  (API `docx` v9 & `exceljs` berbeda dari asumsi kode lama).
 - Auto-Generate belum punya tombol undo tersendiri.
 - Belum ada CI workflow untuk menjalankan `verify:all` di GitHub Actions.
 
