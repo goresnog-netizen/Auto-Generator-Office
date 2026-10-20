@@ -32,6 +32,20 @@ export interface DeckcraftDeckRingkas {
 
 const DASAR = "/api/deckcraft";
 
+/**
+ * Galat API DeckCraft dengan kode status, supaya UI bisa membedakan
+ * "server tidak punya API ini" (mis. hosting statis seperti Vercel) dari
+ * "API ada tapi binary DeckCraft belum terpasang".
+ */
+export class GalatDeckcraft extends Error {
+  readonly status: number;
+  constructor(pesan: string, status: number) {
+    super(pesan);
+    this.name = "GalatDeckcraft";
+    this.status = status;
+  }
+}
+
 async function json<T>(resp: Response): Promise<T> {
   if (!resp.ok) {
     let pesan = `Permintaan gagal (${resp.status}).`;
@@ -41,14 +55,43 @@ async function json<T>(resp: Response): Promise<T> {
     } catch {
       /* badan bukan JSON */
     }
-    throw new Error(pesan);
+    throw new GalatDeckcraft(pesan, resp.status);
+  }
+  // Hosting statis (mis. Vercel) bisa mengembalikan halaman HTML untuk
+  // rute yang tak dikenal. Itu bukan API — laporkan sebagai galat 404
+  // supaya UI bisa menjelaskan penyebabnya, bukan "Unexpected token '<'".
+  const tipe = resp.headers.get("content-type") ?? "";
+  if (!tipe.includes("application/json")) {
+    throw new GalatDeckcraft(
+      "Server ini tidak menyediakan API DeckCraft (dapat halaman HTML, bukan JSON).",
+      404,
+    );
   }
   return (await resp.json()) as T;
 }
 
-/** Status DeckCraft di server: tersedia? versi? tema apa saja? */
+/**
+ * Status DeckCraft di server: tersedia? versi? tema apa saja?
+ *
+ * Bila server tidak menyediakan API sama sekali (mis. hosting statis
+ * seperti Vercel), fungsi ini TIDAK melempar galat — ia mengembalikan
+ * status "tidak tersedia" dengan alasan yang bisa ditampilkan ke user.
+ */
 export async function ambilStatusDeckcraft(): Promise<DeckcraftStatus> {
-  return json<DeckcraftStatus>(await fetch(`${DASAR}/status`));
+  try {
+    return await json<DeckcraftStatus>(await fetch(`${DASAR}/status`));
+  } catch (e) {
+    if (e instanceof GalatDeckcraft) {
+      return {
+        tersedia: false,
+        versi: "-",
+        binPath: "",
+        tema: [],
+        galat: e.message,
+      };
+    }
+    throw e;
+  }
 }
 
 /** Bangun deck dari blok konten; mengembalikan ringkasan deck. */

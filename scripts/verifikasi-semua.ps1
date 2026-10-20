@@ -18,7 +18,7 @@ function Jalankan($nama, $perintah, $argumen) {
   $kode = $LASTEXITCODE
   $teks = ($keluaran | Out-String)
   $lulus = ([regex]::Matches($teks, '\[OK  \]')).Count
-  # Negative test sengaja mencetak baris "[GAGAL]" — itu BUKUKAN kegagalan
+  # Negative test sengaja mencetak baris "[GAGAL]" - itu BUKUKAN kegagalan
   # suite, tapi bukti bahwa skrip menangkap regresi. Yang menentukan lulus
   # atau tidak di sana adalah kode keluar skrip-nya.
   $gagal = ([regex]::Matches($teks, '\[GAGAL\]')).Count
@@ -32,7 +32,10 @@ function Jalankan($nama, $perintah, $argumen) {
     Lulus  = $lulus
     Gagal  = $gagal
   }
-  if ($gagal -gt 0) {
+  if ($gagal -gt 0 -or $kode -ne 0) {
+    # Tampilkan output kalau ada pemeriksaan GAGAL **atau** skrip keluar
+    # dengan kode bukan nol. Tanpa ini, kegagalan yang tak对口 dengan
+    # jumlah [GAGAL] (mis. exception di tengah skrip) jadi tak terlihat.
     Write-Host $teks -ForegroundColor DarkYellow
   } else {
     Write-Host "  $lulus pemeriksaan lulus." -ForegroundColor Green
@@ -46,6 +49,8 @@ Jalankan "Unit test" "npx" @("vitest", "run", "--reporter=dot")
 Jalankan "Bridge DeckCraft (Node)" "node" @("scripts/verify-deckcraft.mts")
 Jalankan "Generator Node (tulis file nyata)" "node" @("scripts/verifikasi-generators.mjs")
 Jalankan "Audit isi generator (konten bermakna)" "node" @("scripts/audit-isi-generator.mjs")
+Jalankan "Gambar tertanam di PDF" "node" @("scripts/verifikasi-pdf-gambar.mjs")
+Jalankan "Fitur baru (CI, undo, pesan, diagram)" "node" @("scripts/verifikasi-fitur-baru.mjs")
 Jalankan "Negative test (skrip tangkap regresi)" "node" @("scripts/audit-negative-test.mjs")
 Jalankan "Id perintah vs engine" "node" @("scripts/verifikasi-perintah.mjs")
 Jalankan "Isi PPTX" "node" @("scripts/verifikasi-pptx.mjs")
@@ -72,7 +77,7 @@ if ($dev) {
   Jalankan "Performa modern (aurora, biaya blur)" "node" @("scripts/verifikasi-performa.mjs")
 } else {
   Write-Host ""
-  Write-Host "Server dev tidak berjalan — lewati pemeriksaan HTTP/UI." -ForegroundColor Yellow
+  Write-Host "Server dev tidak berjalan - lewati pemeriksaan HTTP/UI." -ForegroundColor Yellow
   Write-Host "Jalankan `pnpm dev` lalu ulangi skrip ini." -ForegroundColor Yellow
 }
 

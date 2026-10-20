@@ -39,6 +39,12 @@ export interface AutoGenerateProps {
   mode?: "ganti" | "tambah";
   /** Callback saat pengguna mengubah mode placement. */
   onMode?: (mode: "ganti" | "tambah") => void;
+  /** Bisa membatalkan auto-generate terakhir? */
+  bisaUndoAuto?: boolean;
+  /** Bisa mengulang auto-generate yang dibatalkan? */
+  bisaRedoAuto?: boolean;
+  onUndoAuto?: () => void;
+  onRedoAuto?: () => void;
 }
 
 export function AutoGenerate({
@@ -52,6 +58,10 @@ export function AutoGenerate({
   onMode,
   onHasil,
   onPesan,
+  bisaUndoAuto = false,
+  bisaRedoAuto = false,
+  onUndoAuto,
+  onRedoAuto,
 }: AutoGenerateProps) {
   const [prompt, setPrompt] = useState("");
   const [gaya, setGaya] = useState<GayaOtomatis>("laporan");
@@ -205,6 +215,34 @@ export function AutoGenerate({
       >
         <Ikon nama="ai" /> Susun Dokumen
       </Button>
+
+      {/*
+        Undo khusus auto-generate. Berbeda dari "Urungkan" umum yang
+        membatalkan satu blok per klik, tombol ini mengembalikan dokumen
+        ke keadaan sebelum auto-generate terakhir dalam satu klik.
+      */}
+      {(bisaUndoAuto || bisaRedoAuto) && (
+        <div className="ag-undo">
+          <Button
+            type="outline"
+            size="sm"
+            disabled={!bisaUndoAuto}
+            onClick={() => onUndoAuto?.()}
+            title="Kembalikan dokumen ke kondisi sebelum auto-generate terakhir"
+          >
+            ↶ Batalkan Generate
+          </Button>
+          <Button
+            type="outline"
+            size="sm"
+            disabled={!bisaRedoAuto}
+            onClick={() => onRedoAuto?.()}
+            title="Pulihkan auto-generate yang dibatalkan"
+          >
+            ↷ Ulangi Generate
+          </Button>
+        </div>
+      )}
 
       {pesan && (
         <p className="ag-pesan" role="status">

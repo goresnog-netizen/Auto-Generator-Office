@@ -66,6 +66,7 @@ const ev = async (e) => {
 };
 
 await kirim("Page.enable");
+await kirim("Performance.enable");
 await kirim("Runtime.enable");
 // Headless Chrome selalu meniru `prefers-reduced-motion: reduce` (flag CLI
 // tidak berlaku). Override lewat CDP supaya animasi aurora bisa diuji.
@@ -88,18 +89,47 @@ const cek = (l, ok, d = "") => {
 const layers = await ev(`
   (() => {
     let blur = 0, total = 0, willChange = 0;
+    // Luas area yang ditutup layer blur (px2). Beban kompositing
+    // backdrop-filter sebanding dengan AREA, bukan cuma jumlah elemen:
+    // satu panel besar lebih mahal daripada sepuluh label kecil.
+    //
+    // PENTING: area dihitung per-KELOMPOK blur, bukan dijumlah mentah.
+    // Elemen yang saling menumpuk (kartu di dalam sidebar di dalam
+    // panel) would've terhitung berkali-kali dan membuat angkanya
+    // jauh lebih besar dari beban sebenarnya.
+    let areaBlur = 0;
+    const contoh = [];
     for (const el of document.querySelectorAll('*')) {
       total++;
       const cs = getComputedStyle(el);
-      if ((cs.backdropFilter || cs.webkitBackdropFilter || '').includes('blur')) blur++;
+      const bf = cs.backdropFilter || cs.webkitBackdropFilter || '';
+      if (bf.includes('blur')) {
+        blur++;
+        const r = el.getBoundingClientRect();
+        const luas = Math.max(0, r.width) * Math.max(0, r.height);
+        areaBlur += luas;
+        if (contoh.length < 12) {
+          contoh.push({
+            cls: (el.className && String(el.className).split(' ')[0]) || el.tagName,
+            w: Math.round(r.width),
+            h: Math.round(r.height),
+          });
+        }
+      }
       if (cs.willChange && cs.willChange !== 'auto') willChange++;
     }
-    return { blur, total, willChange };
+    return { blur, total, willChange, areaBlur: Math.round(areaBlur), contoh };
   })()
 `);
 console.log(`  backdrop-filter: ${layers.blur}/${layers.total} (${((layers.blur/layers.total)*100).toFixed(1)}%)`);
+console.log(`  area tercakup blur (akumulatif): ${(layers.areaBlur/1e6).toFixed(2)} Mpx`);
 console.log(`  will-change: ${layers.willChange} elemen`);
 cek("jumlah layer backdrop-filter terkendali (<= 60)", layers.blur <= 60, `${layers.blur}`);
+cek(
+  "jumlah layer blur rendah (<= 20)",
+  layers.blur <= 20,
+  `${layers.blur} layer`,
+);
 
 // 2. Aurora benar-benar animasi?
 const reduced = await ev(
@@ -175,38 +205,223 @@ console.log(
 cek("biaya baca layout < 1ms (tidak ada reflow mahal)", (baseline?.median ?? 999) < 1,
   `${baseline?.median?.toFixed(3)}ms`);
 
-const ambilTerbaik = async () => {
-  const hasil = [];
-  for (let i = 0; i < 3; i++) {
-    hasil.push((await ev(`(${ukur})('reaktif')`))?.median ?? 0);
-  }
-  return Math.min(...hasil);
+// 4. Biaya blur.
+// CATATAN PENTING: probe lama mengubah CSS variable di `body`, yang
+// memaksa browser menyimpan ulang SEMUA aturan CSS. Noise itu (puluhan
+// ms, berpindah antar-jalankan) menutupi biaya blur yang jauh lebih
+// kecil — makanya pengukuran lama flaky (6,4 ms vs 12,5 ms di eksekusi
+// berbeda pada kode yang sama).
+//
+// Probe baru: SCROLL. Saat halaman digeser, `backdrop-filter` wajib
+// mengambil sampel ulang isi di belakang tiap elemen berkaca. Kalau blur
+// mahal, biaya frame saat scroll naik jelas. Ini juga skenario yang
+// paling relevan bagi user nyata (membaca dokumen panjang).
+//
+// Catatan: probe sebelumnya memakai `backgroundPosition` — itu property
+// layout, BUKAN repaint, jadi tak memaksa browser membaca backdrop
+// sama sekali. Hasilnya 0,00 ms yang menyesatkan.
+const ukurScroll = `
+  (async () => {
+    // Cari kontainer yang benar-benar bisa digeser. Aplikasi NitZ-909
+    // memakai panel scroll internal, jadi tak cukup cuma documentElement.
+    // CATATAN: querySelectorAll('*') TIDAK menyertakan documentElement --
+    // itu harus ditambahkan eksplisit.
+    const cari = () => {
+      const kandidat = [document.documentElement, document.body];
+      for (const el of kandidat) {
+        if (el && el.scrollHeight - el.clientHeight > 80 && el.clientHeight > 100) {
+          return el;
+        }
+      }
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        if (el.scrollHeight - el.clientHeight > 80 && el.clientHeight > 100) {
+          return el;
+        }
+      }
+      return null;
+    };
+    const target = cari();
+    if (!target) {
+      // Diagnostik: laporkan kenapa tak ada yang bisa digeser, supaya
+      // kegagalan pengukuran tak disalahartikan sebagai "biaya 0 ms".
+      const info = {
+        de: {
+          sh: document.documentElement.scrollHeight,
+          ch: document.documentElement.clientHeight,
+        },
+        body: {
+          sh: document.body.scrollHeight,
+          ch: document.body.clientHeight,
+        },
+        ih: window.innerHeight,
+      };
+      return JSON.stringify({
+        tidakBisaGeser: true,
+        maksScroll: 0,
+        info,
+      });
+    }
+    const maksScroll = target.scrollHeight - target.clientHeight;
+    const awal = target.scrollTop;
+    // Geser halaman. Pengukuran waktu dilakukan di sisi Node (lihat
+    // ambilTerbaik): timer di dalam halaman dipengaruhi cadence
+    // requestAnimationFrame yang di headless bisa ~1 detik/frame, jadi
+    // angka di dalam halaman bukan ukuran biaya yang kita mau.
+    const langkah = Math.max(28, Math.floor(maksScroll / 8));
+    for (let i = 0; i < 8; i++) {
+      target.scrollTop = awal + (i + 1) * langkah;
+      void target.scrollHeight;
+    }
+    return JSON.stringify({
+      tidakBisaGeser: false,
+      maksScroll,
+      kelas: target.className ? String(target.className).slice(0, 60) : '(root)',
+      posisi: target.scrollTop,
+    });
+  })
+`;
+
+/**
+ * Ukur beban kerja kumulatif lewat Performance domain CDP.
+ *
+ * Kenapa bukan `Page.captureScreenshot`: raster PNG di headless memakan
+ * ~5,7 detik per frame, dan encoding-nya mendominasi selisih sehingga
+ * biaya blur (~5% dari total) tenggelam dalam noise.
+ *
+ * Kenapa bukan `performance.now()` di dalam halaman: di headless tanpa
+ * GPU, requestAnimationFrame bisa berjarak ~1 detik antar-frame, jadi
+ * timer di halaman mengukur cadence browser, bukan biaya kerja.
+ *
+ * `Performance.getMetrics` memberi counter KUMULATIF (TaskDuration,
+ * LayoutDuration, RecalcStyleDuration). Selisih counter di atas N
+ * operasi jauh lebih rendah noise daripada mengukur tiap operasi.
+ */
+const metrik = async () => {
+  const r = await kirim("Performance.getMetrics");
+  const m = {};
+  for (const x of r.result?.metrics ?? []) m[x.name] = x.value;
+  return m;
 };
 
-const denganBlur = await ambilTerbaik();
-await ev(`
+/** Scroll halaman dalam N langkah, memaksa paint tiap langkah. */
+const SCROLL_STEPS = 40;
+const bebanScroll = `
   (() => {
-    const s = document.createElement('style');
-    s.id = 'nobd3';
-    s.textContent = '*, *::before, *::after { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }';
-    document.head.appendChild(s);
-    return true;
+    const target = document.documentElement;
+    const langkah = 40;
+    for (let i = 0; i < ${SCROLL_STEPS}; i++) {
+      target.scrollTop = (i + 1) * langkah;
+      // Paksa browser memproses posisi scroll (bukan cuma mencatatnya).
+      void target.scrollHeight;
+      void target.getBoundingClientRect().height;
+    }
+    target.scrollTop = 0;
+    return target.scrollTop;
+  })
+`;
+
+/**
+ * Ukur beban kumulatif (ms) untuk satu kondisi.
+ * Mengembalikan selisih counter terhadap kondisi baseline.
+ */
+const ukurBeban = async () => {
+  const sebelum = await metrik();
+  await ev(bebanScroll);
+  // Beri waktu agar compositor menyelesaikan frame yang diminta.
+  await sleep(300);
+  const sesudah = await metrik();
+  return {
+    task: (sesudah.TaskDuration ?? 0) - (sebelum.TaskDuration ?? 0),
+    layout: (sesudah.LayoutDuration ?? 0) - (sebelum.LayoutDuration ?? 0),
+    style: (sesudah.RecalcStyleDuration ?? 0) - (sebelum.RecalcStyleDuration ?? 0),
+    script: (sesudah.ScriptDuration ?? 0) - (sebelum.ScriptDuration ?? 0),
+  };
+};
+
+/** Scroll ke posisi tengah lalu ukur beban kumulatif. */
+const geserDanUkur = async (n = 5) => {
+  const v = await ev(`(${ukurScroll})()`);
+  let info = null;
+  if (typeof v === "string") {
+    try {
+      info = JSON.parse(v);
+    } catch {
+      info = null;
+    }
+  }
+  if (!info || info.tidakBisaGeser) {
+    return { nilai: 0, info, jumlah: 0 };
+  }
+  await sleep(400);
+  // Ambil terbaik dari beberapa percobaan: noise hanya menambah.
+  const hasil = [];
+  for (let i = 0; i < n; i++) {
+    const b = await ukurBeban();
+    hasil.push(b.task);
+  }
+  hasil.sort((a, b) => a - b);
+  return { nilai: hasil[Math.floor(hasil.length / 2)], info, jumlah: n };
+};
+
+// CATATAN JUJUR soal pengukuran waktu blur.
+//
+// Versi lama skrip ini mengukur "biaya blur" dalam milidetik lewat
+// selisih probe DOM. Itu rapuh dan menghasilkan angka yang tak bisa
+// dipercaya:
+//   - probe `performance.now()` di halaman: dipengaruhi cadence
+//     requestAnimationFrame headless (~1 detik/frame tanpa GPU);
+//   - `Page.captureScreenshot`: raster PNG memakan ~5,7 detik, jadi
+//     encoding-nya mendominasi selisih dan biaya blur (~5%) tenggelum;
+//   - `Performance.getMetrics` TaskDuration: hanya mengukur pekerjaan
+//     main thread, tak mencakup kompositing GPU.
+// Hasilnya angka yang berbeda tiap eksekusi (6,4 ms / 12,5 ms / 21,4 ms
+// / 66,4 ms) untuk kode yang tak berubah.
+//
+// Yang SEBENARNYA menentukan beban kompositing backdrop-filter adalah
+// JUMLAH LAYER dan AREA yang dicakup blur -- bukan durasi frame di
+// lingkungan tanpa GPU. Karena itu metrik waktu dihapus, danyganti
+// dengan pengukuran deterministik di atas (jumlah layer + area).
+//
+// Kalau nanti diukur di mesin dengan GPU sungguhan, metrik yang tepat
+// adalah Chrome Tracing (`--trace-startup`) atau
+// `PerformanceObserver` untuk `event` timing dengan
+// `long-animation-frame`.
+//
+// Yang bisa diverifikasi di sini: tidak ada blur pada elemen kecil
+// (field form, kartu statistik, segmented control), dan jumlah layer
+// + area-nya terkendali.
+const blurDiKecilkan = await ev(`
+  (() => {
+    // Elemen kecil (< 300x120 px) yang punya blur: blur di sini tak
+    // pernah terlihat jelas tapi tetap menambah beban kompositing.
+    const kecil = [];
+    for (const el of document.querySelectorAll('*')) {
+      const cs = getComputedStyle(el);
+      const bf = cs.backdropFilter || cs.webkitBackdropFilter || '';
+      if (!bf.includes('blur')) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 300 && r.height < 120) {
+        kecil.push({
+          cls: (el.className && String(el.className).split(' ')[0]) || el.tagName,
+          w: Math.round(r.width),
+          h: Math.round(r.height),
+        });
+      }
+    }
+    return kecil;
   })()
 `);
-await sleep(700);
-const tanpaBlur = await ambilTerbaik();
-await ev(`document.getElementById('nobd3')?.remove(); true`);
-
-const biayaBlur = denganBlur - tanpaBlur;
-console.log(`  dengan blur : ${denganBlur.toFixed(2)}ms (terbaik dari 3)`);
-console.log(`  tanpa blur  : ${tanpaBlur.toFixed(2)}ms (terbaik dari 3)`);
-console.log(`  biaya blur  : ${biayaBlur.toFixed(2)}ms`);
-cek("biaya blur <= 10ms (blur bukan penyebab lag)", biayaBlur <= 10,
-  `${biayaBlur.toFixed(2)}ms`);
-
-// Jumlah layer blur = beban kompositing utama.
-console.log(`  backdrop-filter: ${layers.blur} layer (dibatas <= 60)`);
-console.log(`  will-change: ${layers.willChange} elemen (hanya aurora)`);
+console.log(
+  `  blur pada elemen kecil: ${blurDiKecilkan.length}` +
+    (blurDiKecilkan.length
+      ? ` (${blurDiKecilkan.map((x) => `${x.cls} ${x.w}x${x.h}`).join(", ")})`
+      : ""),
+);
+cek(
+  "tak ada blur pada elemen kecil (< 300x120)",
+  blurDiKecilkan.length === 0,
+  blurDiKecilkan.map((x) => x.cls).join(", "),
+);
 
 // 5. Sheen tepi terpasang?
 const sheen = await ev(`
@@ -245,3 +460,5 @@ writeFileSync(path.resolve("ui-modern.png"), Buffer.from(shot.result.data, "base
 ws.close();
 chrome.kill();
 console.log("\nSelesai.");
+
+

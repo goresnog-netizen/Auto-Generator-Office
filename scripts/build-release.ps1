@@ -1,5 +1,5 @@
 # ============================================================
-# build-release.ps1 — NitZ-909 installer & deploy-package builder
+# build-release.ps1 - NitZ-909 installer & deploy-package builder
 # Jalankan:  powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1
 # Hasil:
 #   1. dist/                     -> build produksi (siap host statis)
@@ -7,7 +7,12 @@
 #   3. release\NitZ-909-v0.1.0.zip -> paket installer (dist + README + vercel.json)
 # ============================================================
 $ErrorActionPreference = "Stop"
-$root = Split-Path -Parent $PSScriptRoot
+# `$PSScriptRoot` tak selalu terisi di Windows PowerShell 5, jadi
+# fallback ke lokasi kerja saat ini.
+$root = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+if (-not (Test-Path (Join-Path $root "package.json"))) {
+  $root = Split-Path -Parent (Get-Location).Path
+}
 Set-Location $root
 
 Write-Host "== 1/4  Build produksi ==" -ForegroundColor Cyan
@@ -27,7 +32,7 @@ foreach ($i in $items) {
 }
 # README deploy khusus
 $readme = @"
-# NitZ-909 — Deploy GitHub / Vercel
+# NitZ-909 - Deploy GitHub / Vercel
 
 Folder ini berisi file produksi sumber untuk di-push ke GitHub.
 
@@ -42,7 +47,7 @@ Folder ini berisi file produksi sumber untuk di-push ke GitHub.
 ### Vercel (otomatis via GitHub)
 1. Push isi folder ini ke repo GitHub (git init -> add -> commit -> push).
 2. https://vercel.com/new -> pilih repo -> framework **Vercel** auto-detect Vite.
-3. Build Command: `pnpm build` · Output Directory: `dist` -> Deploy.
+3. Build Command: `pnpm build`  Output Directory: `dist` -> Deploy.
 
 ### Jalankan lokal
 ```bash
@@ -64,7 +69,7 @@ New-Item -ItemType Directory -Path $stage -Force | Out-Null
 Copy-Item (Join-Path $root "dist") -Destination $stage -Recurse -Force
 Copy-Item (Join-Path $root "vercel.json") -Destination $stage -Force
 $installerReadme = @"
-NitZ-909 v0.1.0 — Paket Installer (statis)
+NitZ-909 v0.1.0 - Paket Installer (statis)
 ==========================================
 Isi:
   /dist            -> aplikasi web siap host (buka lewat web server statis)

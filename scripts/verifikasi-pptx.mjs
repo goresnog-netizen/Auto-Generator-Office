@@ -7,6 +7,7 @@
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
+import { ekstrakZip } from "./zip-util.mjs";
 
 const PPTX = path.resolve("vendors/deckcraft-bin/verify/deck-verifikasi.pptx");
 const KELUARAN = path.resolve("vendors/deckcraft-bin/verify");
@@ -16,18 +17,12 @@ const cek = (label, ok, detail = "") => {
   if (!ok) process.exitCode = 1;
 };
 
-// Ekstrak PPTX ke folder sementara (PowerShell Expand-Archive).
+// Ekstrak PPTX ke folder sementara.
+// Pemakai utilitas ZIP Node, bukan `Expand-Archive` PowerShell: path
+// yang mengandung spasi atau path 8.3 (C:\Users\BROKEN~1\...) tak
+// selalu bisa dibuka PowerShell.
 const diekstrak = path.join(KELUARAN, "pptx-extract");
-execFileSync(
-  "powershell",
-  [
-    "-NoProfile",
-    "-Command",
-    `Remove-Item -Recurse -Force '${diekstrak}' -ErrorAction SilentlyContinue; ` +
-      `Expand-Archive -Path '${PPTX}' -DestinationPath '${diekstrak}' -Force`,
-  ],
-  { stdio: "pipe" },
-);
+ekstrakZip(PPTX, diekstrak);
 
 const { readdirSync, readFileSync: rf, existsSync } = await import("node:fs");
 const slideDir = path.join(diekstrak, "ppt", "slides");

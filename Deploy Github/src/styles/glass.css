@@ -369,24 +369,26 @@ body {
     0 12px 30px color-mix(in srgb, var(--shadow) 30%, transparent) !important;
 }
 
-/* ===== KARTU STATISTIK DASHBOARD ===== */
+/* ===== KARTU STATISTIK DASHBOARD =====
+   Tanpa backdrop-filter: kartu statistik kecil (8 di halaman dashboard),
+   isinya angka besar. Efek kaca lewat background + border + shadow sudah
+   cukup, dan blur di balik angka cuma menambah beban tanpa membuat angka
+   lebih terbaca. */
 .dash-card,
 .stat-kotak {
   background: var(--glass-bg) !important;
   border: 1px solid var(--glass-border) !important;
-  -webkit-backdrop-filter: blur(12px) saturate(125%);
-  backdrop-filter: blur(12px) saturate(125%);
   box-shadow: var(--glass-highlight), var(--glass-edge),
     0 2px 10px color-mix(in srgb, var(--shadow) 16%, transparent) !important;
 }
 
-/* ===== SEGMENTED CONTROL (tampilan galeri / dashboard) ===== */
+/* ===== SEGMENTED CONTROL (tampilan galeri / dashboard) =====
+   Tanpa backdrop-filter: strip kontrol sempit, background-nya sudah
+   semi-transparan, dan blur 10px di area sekecil itu tak terbaca. */
 .segmen-tampilan,
 .segmen-dashboard {
   background: var(--glass-bg-subtle) !important;
   border: 1px solid var(--glass-border) !important;
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
   box-shadow: var(--glass-highlight), inset 0 1px 2px color-mix(in srgb, var(--shadow) 12%, transparent) !important;
 }
 .segmen-tampilan button,
@@ -422,14 +424,22 @@ body {
   transform: translateY(-1px);
 }
 
-/* ===== INPUT / SELECT / TEXTAREA: KACA TEBAL (harus tetap terbaca) ===== */
+/* ===== INPUT / SELECT / TEXTAREA: KACA TEBAL (harus tetap terbaca) =====
+   Catatan performa: field form TIDAK memakai backdrop-filter.
+   Alasannya:
+     1. Field form biasanya punya background sendiri yang semi-transparan
+        (--glass-bg-strong), jadi blur di belakang field hampir tak
+        terlihat — tak ada untung visualnya.
+     2. Setiap field = satu layer blur tambahan. Di halaman Ekspor ada
+        20 field (10 input + 7 select + 3 textarea) = 20 dari total 48
+        layer blur. Menghapusnya memangkas beban kompositing nearly
+        separuh tanpa mengubah tampilan yang berarti.
+   Efek kaca tetap bertahan lewat background + border + shadow. */
 .nitz-app-root input,
 .nitz-app-root select,
 .nitz-app-root textarea {
   background: var(--glass-bg-strong) !important;
   border: 1px solid var(--glass-border) !important;
-  -webkit-backdrop-filter: blur(12px) saturate(130%);
-  backdrop-filter: blur(12px) saturate(130%);
   box-shadow: var(--glass-highlight), inset 0 1px 3px color-mix(in srgb, var(--shadow) 14%, transparent) !important;
   border-radius: var(--radius) !important;
 }
@@ -531,8 +541,9 @@ body {
   border-radius: var(--radius-round);
   border: 1px solid var(--glass-border);
   background: var(--glass-bg-subtle);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
+  /* Tanpa backdrop-filter: pita ini cuma ~140x21 px. Blur di elemen
+     sekecil itu tak pernah terlihat, tapi tetap menambah satu layer
+     kompositing. Efek kaca tetap lewat background + border. */
   white-space: nowrap;
 }
 .dc-pita-ok {
@@ -580,6 +591,23 @@ body {
   color: var(--danger-text);
   font-size: 10px;
   word-break: break-word;
+}
+.dc-kosong p {
+  margin: 0 0 var(--space-2);
+}
+.dc-kosong code {
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  background: var(--glass-bg-subtle);
+  border: 1px solid var(--glass-border);
+  font-size: 0.92em;
+}
+.dc-catatan {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--glass-border);
+  font-size: 10px;
+  opacity: 0.85;
 }
 /* Lembar pratinjau: "kaca-sheet" di atas panel kaca → efek berlapis. */
 .dc-lembar {
@@ -763,12 +791,25 @@ body {
   color: var(--danger-text);
   line-height: 1.5;
 }
+/* Baris tombol undo/redo khusus auto-generate. */
+.ag-undo {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.ag-undo > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
 /* Kartu auto-generate: kaca sedikit lebih pekat supaya textarea jelas. */
 .ag-kartu {
   background: var(--glass-bg-strong) !important;
 }
 
-/* ===== INDIKATOR PERFORMA ===== */
+/* ===== INDIKATOR PERFORMA =====
+   Tanpa backdrop-filter: badge ini ~65x23 px, jauh terlalu kecil
+   untuk blur terlihat. Background + border + shadow sudah memberi
+   kesan kaca tanpa menambah layer kompositing. */
 .performa-badge {
   display: inline-flex;
   align-items: center;
@@ -777,8 +818,6 @@ body {
   border-radius: var(--radius-round);
   border: 1px solid var(--glass-border);
   background: var(--glass-bg-subtle);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
   font-size: var(--font-size-caption);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

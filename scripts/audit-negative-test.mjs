@@ -12,6 +12,8 @@
  *     → exceljs menulis JSON mentah.
  *  C. DOCX: reference numbering tak terdaftar
  *     → docx menulis numId literal `{...}`.
+ *  D. PDF gambar: `muatGambar` selalu mengembalikan null (gambar tak pernah
+ *     tertanam) → PDF tak punya XObject /Subtype /Image.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
@@ -23,25 +25,46 @@ const cek = (label, ok, detail = "") => {
   if (!ok) process.exitCode = 1;
 };
 
-/** Jalankan skrip verifikasi; kembalikan kode keluar. */
-function jalankanSkrip() {
-  try {
-    execFileSync(process.execPath, ["scripts/verifikasi-generators.mjs"], {
-      cwd: AKAR,
-      encoding: "utf8",
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    return { kode: 0, keluar: "" };
-  } catch (e) {
-    return {
-      kode: e.status ?? -1,
-      keluar: `${e.stdout?.toString() ?? ""}\n${e.stderr?.toString() ?? ""}`,
-    };
+/**
+ * Jalankan skrip verifikasi; kembalikan kode keluar.
+ *
+ * Render Mermaid butuh Chrome dan bisa gagal sesaat (proses lambat,
+ * timeout, lock sementara). Supaya fluktuasi tak salah dibaca sebagai
+ * regresi, kegagalan dicoba ulang sekali. Kalau tetap gagal, hasilnya
+ * dianggap gagal.
+ */
+function jalankanSkrip(skrip = "scripts/verifikasi-generators.mjs") {
+  let terakhir = { kode: -1, keluar: "" };
+  for (let percobaan = 0; percobaan < 2; percobaan++) {
+    try {
+      execFileSync(process.execPath, [skrip], {
+        cwd: AKAR,
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+        timeout: 300_000,
+      });
+      return { kode: 0, keluar: "" };
+    } catch (e) {
+      terakhir = {
+        kode: e.status ?? -1,
+        keluar: `${e.stdout?.toString() ?? ""}\n${e.stderr?.toString() ?? ""}`,
+      };
+      // Kalau skrip sempat mencetak [GAGAL], ini regresi yang SENGAJA
+      // (_dan_| bukan fluktuasi) — tak perlu diulang.
+      if (terakhir.keluar.includes("[GAGAL]")) return terakhir;
+    }
   }
+  return terakhir;
 }
 
 /** Balik satu perubahan pada file, jalankan skrip, kembalikan file. */
-function ujiRegresi(nama, file,Transformasi, expectGagal = true) {
+function ujiRegresi(
+  nama,
+  file,
+  Transformasi,
+  expectGagal = true,
+  skrip = "scripts/verifikasi-generators.mjs",
+) {
   const asli = readFileSync(file, "utf8");
   const rusak = Transformasi(asli);
   if (rusak === asli) {
@@ -50,7 +73,7 @@ function ujiRegresi(nama, file,Transformasi, expectGagal = true) {
   }
   writeFileSync(file, rusak, "utf8");
   try {
-    const hasil = jalankanSkrip();
+    const hasil = jalankanSkrip(skrip);
     const gagal = hasil.kode !== 0;
     const barisGagal = (hasil.keluar.match(/\[GAGAL\]/g) || []).length;
     cek(
@@ -112,12 +135,30 @@ ujiRegresi(
   },
 );
 
+// --- D. PDF: gambar tak pernah dimuat (muatGambar selalu null) ---
+// Efeknya: `renderImage` jatuh ke keterangan teks, PDF tak punya
+// XObject /Subtype /Image sama sekali.
+ujiRegresi(
+  "D. PDF gambar tak pernah tertanam",
+  path.join(AKAR, "src", "generators", "pdf.ts"),
+  (s) => s.replace("const buf = await this.muatGambar(block.src);", "const buf = null;"),
+  true,
+  "scripts/verifikasi-pdf-gambar.mjs",
+);
+
 // --- Sanity: setelah semua dibalik, skrip harus lulus lagi ---
 const akhir = jalankanSkrip();
 cek(
-  "D. Setelah semua bug dikembalikan, skrip lulus lagi",
+  "E. Setelah semua bug dikembalikan, skrip lulus lagi",
   akhir.kode === 0,
   `exit ${akhir.kode}`,
+);
+
+const akhirGambar = jalankanSkrip("scripts/verifikasi-pdf-gambar.mjs");
+cek(
+  "F. Setelah semua bug dikembalikan, skrip gambar lulus lagi",
+  akhirGambar.kode === 0,
+  `exit ${akhirGambar.kode}`,
 );
 
 console.log("\nSelesai.");

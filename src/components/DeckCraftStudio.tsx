@@ -143,6 +143,17 @@ export function DeckCraftStudio({
 
   const tidakTersedia = status !== null && !status.tersedia;
 
+  /**
+   * Bedakan dua sebab "tidak tersedia" yang punya tindakan berbeda:
+   *  - API DeckCraft tidak ada sama sekali (hosting statis) → butuh
+   *    server Node;
+   *  - API ada tapi binary deckcraft-cli belum terpasang → cukup
+   *    jalankan skrip vendoring.
+   */
+  const apiTanpaServer = (status?.galat ?? "").includes(
+    "tidak menyediakan API DeckCraft",
+  );
+
   return (
     <div className="dc-studio">
       <div className="dc-kepala">
@@ -161,11 +172,35 @@ export function DeckCraftStudio({
 
       {tidakTersedia ? (
         <div className="dc-kosong">
-          <p>
-            DeckCraft tidak dapat dijalankan di mesin ini. Jalankan skrip
-            vendoring untuk mengunduh binernya, lalu muat ulang halaman.
-          </p>
+          {apiTanpaServer ? (
+            <>
+              <p>
+                Server ini tidak menjalankan API DeckCraft. DeckCraft adalah
+                program native (Rust), jadi butuh proses Node — hosting
+                statis seperti Vercel tak bisa menjalankannya.
+              </p>
+              <p>
+                Opsi: jalankan <code>pnpm serve</code> di komputer ini
+                (server produksi di port 8090), atau deploy ke host
+                ber-Node (Railway, Render, VPS, Docker).
+              </p>
+            </>
+          ) : (
+            <>
+              <p>
+                DeckCraft tidak dapat dijalankan di mesin ini. Jalankan skrip
+                vendoring untuk mengunduh binernya, lalu muat ulang halaman.
+              </p>
+              <p>
+                Perintah: <code>pnpm vendor:deckcraft</code>
+              </p>
+            </>
+          )}
           {status?.galat && <code className="dc-galat-detail">{status.galat}</code>}
+          <p className="dc-catatan">
+            Sisa fitur NitZ-909 (template, editor, ekspor PPTX/DOCX/XLSX/PDF)
+            tetap berfungsi tanpa DeckCraft.
+          </p>
         </div>
       ) : (
         <>

@@ -25,6 +25,8 @@
     "verify:auto-generate": "node scripts/verifikasi-auto-generate.mjs",
     "verify:pptx-generator": "node scripts/verifikasi-pptx-generator.mjs",
     "verify:generators": "node scripts/verifikasi-generators.mjs",
+    "verify:pdf-image": "node scripts/verifikasi-pdf-gambar.mjs",
+    "verify:fitur-baru": "node scripts/verifikasi-fitur-baru.mjs",
     "audit:generators": "node scripts/audit-isi-generator.mjs",
     "audit:negative": "node scripts/audit-negative-test.mjs",
     "verify:backdrop": "node scripts/verifikasi-backdrop.mjs",

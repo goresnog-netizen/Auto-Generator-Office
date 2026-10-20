@@ -38,6 +38,31 @@ Sidebar kanan → panel **Auto-Generate**:
 
 Hasil langsung mengisi kanvas dan mengganti judul dokumen.
 
+### Mode placement
+
+Toggle **Ganti kanvas / Tambahkan**:
+
+- **Ganti kanvas** — hasil menggantikan seluruh isi kanvas; judul ikut
+  diganti dengan judul hasil.
+- **Tambahkan** — hasil disambung di akhir isi yang ada; judul tak diubah.
+
+### Undo khusus Auto-Generate
+
+Setelah generate selesai, panel menampilkan dua tombol:
+
+- **↶ Batalkan Generate** — mengembalikan dokumen ke kondisi **sebelum**
+  generate (blok + judul), dalam satu klik.
+- **↷ Ulangi Generate** — memulihkan hasil yang dibatalkan.
+
+Tombol ini **bukan** "Urungkan" umum di toolbar. Undo umum membatalkan satu
+blok per klik; untuk hasil auto-generate yang terdiri dari puluhan blok,
+itu berarti puluhan klik. Tombol ini menyimpan snapshot lengkap tiap kali
+generate berjalan, jadi satu klik sudah cukup.
+
+Riwayat dibatasi 20 entri (snapshot penuh bisa besar), dan ditulis lewat
+`useRef` — bukan state — supaya React yang membatching update tak membuat
+riwayat tertimpa.
+
 ---
 
 ## Yang membedakan dari "cukup pakai AI"

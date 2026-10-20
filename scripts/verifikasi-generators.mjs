@@ -27,6 +27,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { inflateSync } from "node:zlib";
+import { ekstrakZip } from "./zip-util.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -150,6 +151,7 @@ console.log("__RESULT__" + JSON.stringify({
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],
       cwd: AKAR,
+      timeout: 180_000,
     });
   } catch (e) {
     console.error(
@@ -164,28 +166,19 @@ console.log("__RESULT__" + JSON.stringify({
   return JSON.parse(baris.slice("__RESULT__".length));
 }
 
-/** Daftar path di dalam sebuah ZIP (setelah diekstrak). */
+/**
+ * Daftar path di dalam sebuah ZIP (setelah diekstrak).
+ *
+ * Ekstraksi memakai utilitas ZIP Node (scripts/zip-util.mjs), bukan
+ * `Expand-Archive` PowerShell: path sementara yang mengandung spasi
+ * atau path 8.3 (C:\Users\BROKEN~1\...) tak selalu bisa dibuka
+ * PowerShell, dan pemanggilan powershell.exe menambah hundreds of ms
+ * per berkas.
+ */
 function daftarIsiZip(zipPath) {
   const target = path.join(dir, "x-" + path.basename(zipPath));
-  execFileSync(
-    "powershell",
-    [
-      "-NoProfile",
-      "-Command",
-      `Remove-Item -Recurse -Force '${target}' -ErrorAction SilentlyContinue; ` +
-        `Expand-Archive -Path '${zipPath}' -DestinationPath '${target}' -Force`,
-    ],
-    { stdio: "pipe" },
-  );
-  const hasil = [];
-  const jalan = (p) => {
-    for (const e of readdirSync(p, { withFileTypes: true })) {
-      const f = path.join(p, e.name);
-      if (e.isDirectory()) jalan(f);
-      else hasil.push(path.relative(target, f).replace(/\\/g, "/"));
-    }
-  };
-  jalan(target);
+  rmSync(target, { recursive: true, force: true });
+  const hasil = ekstrakZip(zipPath, target);
   return { target, hasil };
 }
 

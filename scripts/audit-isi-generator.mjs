@@ -11,6 +11,7 @@ import { readFileSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from "nod
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { ekstrakZip } from "./zip-util.mjs";
 
 const require = createRequire(import.meta.url);
 const AKAR = process.cwd();
@@ -101,7 +102,7 @@ try {
     const target = path.join(dir, "a.docx");
     await jalankan("src/generators/word.ts", "WordGenerator", { outputPath: target }, { type: "word", title: "Laporan Uji" }, BLOK);
     const extract = path.join(dir, "xd");
-    execFileSync("powershell", ["-NoProfile", "-Command", `Expand-Archive -Path '${target}' -DestinationPath '${extract}' -Force`], { stdio: "pipe" });
+    ekstrakZip(target, extract);
     const xml = readFileSync(path.join(extract, "word", "document.xml"), "utf8");
     const teks = teksDocx(xml);
     for (const k of KATA) {
@@ -116,7 +117,7 @@ try {
     const target = path.join(dir, "a.xlsx");
     await jalankan("src/generators/xlsx.ts", "XLSXGenerator", { outputPath: target, sheets: [] }, { type: "xlsx", title: "Laporan Uji" }, BLOK);
     const extract = path.join(dir, "xx");
-    execFileSync("powershell", ["-NoProfile", "-Command", `Expand-Archive -Path '${target}' -DestinationPath '${extract}' -Force`], { stdio: "pipe" });
+    ekstrakZip(target, extract);
     const shared = path.join(extract, "xl", "sharedStrings.xml");
     const strings = readFileSync(shared, "utf8");
     for (const k of ["Laporan Uji", "Poin satu", "nilai 1"]) {
@@ -147,7 +148,7 @@ try {
     const target = path.join(dir, "a.pptx");
     await jalankan("src/generators/pptx.ts", "PPTXGenerator", { outputPath: target }, { type: "pptx", title: "Laporan Uji" }, BLOK);
     const extract = path.join(dir, "xp");
-    execFileSync("powershell", ["-NoProfile", "-Command", `Expand-Archive -Path '${target}' -DestinationPath '${extract}' -Force`], { stdio: "pipe" });
+    ekstrakZip(target, extract);
     const { readdirSync } = require("node:fs");
     const slideDir = path.join(extract, "ppt", "slides");
     const semua = readdirSync(slideDir)

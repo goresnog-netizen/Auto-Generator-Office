@@ -15,9 +15,48 @@ import {
 } from '../types/index.ts';
 
 import { promisify } from 'util';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 
-const execAsync = promisify(exec);
+// Semua perintah eksternal dijalankan lewat `execFile` (tanpa shell),
+// bukan `exec`. Dengan begitu path berkas dan judul dokumen yang
+// mengandung karakter shell tak bisa menyuntik perintah lain.
+const execFileAsync = promisify(execFile);
+
+/**
+ * Cari npx yang bisa dijalankan tanpa shell.
+ *
+ * Di Windows, `npx` adalah berkas `.cmd` (batch). `execFile` tanpa shell
+ * tak bisa menjalankan batch file - Node menolak extension .cmd/.bat demi
+ * keamanan (CVE-2024-27980). Solusinya: jalankan `npx-cli.js` langsung
+ * dengan Node, tanpa shell sama sekali.
+ *
+ * @returns perintah + awalan argumen, atau null bila npx tak ditemukan.
+ */
+function cariNpx(): { cmd: string; awalan: string[] } | null {
+  // 1. npx-cli.js di sebelah node.exe (layout instalasi Node standar).
+  const besideNode = path.join(
+    path.dirname(process.execPath),
+    'node_modules',
+    'npm',
+    'bin',
+    'npx-cli.js',
+  );
+  if (existsSync(besideNode)) {
+    return { cmd: process.execPath, awalan: [besideNode] };
+  }
+
+  // 2. npx di PATH sebagai executable native (Linux/macOS).
+  if (process.platform !== 'win32') {
+    return { cmd: 'npx', awalan: [] };
+  }
+
+  // 3. Fallback terakhir di Windows: .cmd butuh shell. Hanya dipakai
+  //    kalau npx-cli.js tak ditemukan, dan argumennya tetap array
+  //    (bukan string) sehingga tak ada interpolasi shell.
+  return { cmd: 'npx.cmd', awalan: [] };
+}
 
 export interface DiagramGeneratorOptions extends Omit<GeneratorOptions, 'theme'> {
   format?: 'svg' | 'png' | 'pdf';
@@ -171,63 +210,145 @@ export class DiagramGenerator implements DocumentGenerator {
     const mermaidMatch = source.match(/```mermaid\n([\s\S]*?)\n```/);
     const mermaidCode = mermaidMatch ? mermaidMatch[1].trim() : source;
 
-    const outputPath = this.options.outputPath || `./output/${config.title}-diagram.${this.options.format || 'svg'}`;
+    // Judul dokumen masuk ke nama berkas. Sanitasi supaya tak ada
+    // karakter jalur yang bisa keluar dari direktori target, dan supaya
+    // tak ada tanda kutip yang bisa menutup argumen perintah.
+    const judulAman = String(config.title ?? 'diagram')
+      .replace(/[\\/:*?"<>|]+/g, '-')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 80) || 'diagram';
+    const outputPath =
+      this.options.outputPath ||
+      `./output/${judulAman}-diagram.${this.options.format || 'svg'}`;
 
     // Ensure output directory exists
     const fs = await import('fs');
     const path = await import('path');
-    const dir = path.dirname(outputPath);
+    // Path absolut: `outputPath` bisa relatif (mis. "./output/x.svg"),
+    // sedangkan perintah dijalankan dengan `cwd` lain. Path relatif akan
+    // ditafsirkan relatif terhadap cwd itu dan berkas tak ditemukan.
+    const outputAbs = path.resolve(outputPath);
+    const dir = path.dirname(outputAbs);
     await fs.promises.mkdir(dir, { recursive: true });
 
     // Write mermaid file
-    const mmdPath = outputPath.replace(/\.(svg|png|pdf)$/, '.mmd');
-    await fs.promises.writeFile(mmdPath, mermaidCode);
+    const mmdAbs = outputAbs.replace(/\.(svg|png|pdf)$/, '.mmd');
+    await fs.promises.writeFile(mmdAbs, mermaidCode);
 
-    // Try to render with mermaid-cli
+    // Try to render with mermaid-cli.
+    //
+    // Pakai `execFile` (bukan `exec`): perintah dijalankan tanpa shell,
+    // jadi judul dokumen atau path yang berisi karakter shell tak bisa
+    // menyuntik perintah lain.
     try {
       const theme = this.options.theme === 'dark' ? 'dark' : 'default';
-      const cmd = `npx -y @mermaid-js/mermaid-cli -i "${mmdPath}" -o "${outputPath}" -t ${theme} -b ${this.options.backgroundColor || 'transparent'} ${this.options.width ? `-w ${this.options.width}` : ''} ${this.options.height ? `-H ${this.options.height}` : ''}`;
+      const npx = cariNpx();
+      if (!npx) {
+        throw new Error('npx tidak ditemukan di sistem.');
+      }
+      const args = [
+        ...npx.awalan,
+        '-y',
+        '@mermaid-js/mermaid-cli',
+        '-i', mmdAbs,
+        '-o', outputAbs,
+        '-t', theme,
+        '-b', this.options.backgroundColor || 'transparent',
+      ];
+      if (this.options.width) args.push('-w', String(this.options.width));
+      if (this.options.height) args.push('-H', String(this.options.height));
 
-      await execAsync(cmd);
+      await execFileAsync(npx.cmd, args, { cwd: dir });
 
-      const buffer = await fs.promises.readFile(outputPath);
+      const buffer = await fs.promises.readFile(outputAbs);
       return { success: true, outputPath, buffer };
     } catch (error) {
-      // Fallback: return mermaid source
+      // Fallback: return mermaid source.
+      //
+      // Dua sebab yang berbeda dan perlu dibedakan user:
+      //  1. mermaid-cli tak terpasang / gagal — sumber .mmd dikembalikan;
+      //  2. mermaid-cli jalan TAPI Chrome/headless tak ada — error-nya
+      //     khas ("Could not find Chrome", "browser was not found").
+      //     Di kasus ini sumber .mmd tetap dikembalikan, tapi pesannya
+      //     menyebut kebutuhan Chrome supaya user tahu apa yang kurang.
+      const pesanError =
+        error instanceof Error ? error.message : String(error);
+      const butuhChrome =
+        /could not find chrome|browser was not found|chromium is not installed|chrome.*not found/i.test(
+          pesanError,
+        );
+      const pesan = butuhChrome
+        ? 'Mermaid CLI berjalan tetapi Chrome/Chromium tidak ditemukan. ' +
+          'Pasang Chrome (atau set PUPPETEER_EXECUTABLE_PATH) lalu ulangi. ' +
+          'Sementara itu sumber Mermaid dikembalikan sebagai .mmd.'
+        : 'Mermaid CLI tidak tersedia atau gagal. Sumber Mermaid dikembalikan sebagai .mmd. ' +
+          'Pasang @mermaid-js/mermaid-cli (npm i -g @mermaid-js/mermaid-cli) untuk render SVG.';
       return {
         success: true,
-        outputPath: mmdPath,
+        outputPath: mmdAbs,
         buffer: Buffer.from(mermaidCode),
-        metadata: { fallback: true, message: 'Mermaid CLI not available, returned source' }
+        metadata: {
+          fallback: true,
+          butuhChrome,
+          message: pesan,
+          // Detail teknis disimpan terpisah supaya pesan user tetap ringkas.
+          detail: pesanError.slice(0, 500),
+        },
       };
     }
   }
 
   private async renderPlantUML(source: string, config: DocumentConfig): Promise<GeneratorResult> {
-    const outputPath = this.options.outputPath || `./output/${config.title}-diagram.${this.options.format || 'svg'}`;
+    const judulAman = String(config.title ?? 'diagram')
+      .replace(/[\\/:*?"<>|]+/g, '-')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 80) || 'diagram';
+    const outputPath =
+      this.options.outputPath ||
+      `./output/${judulAman}-diagram.${this.options.format || 'svg'}`;
 
     const fs = await import('fs');
     const path = await import('path');
-    const dir = path.dirname(outputPath);
+    // Path absolut: perintah dijalankan dengan `cwd` sendiri, jadi path
+    // relatif tak akan ketemu. Lihat renderMermaid.
+    const outputAbs = path.resolve(outputPath);
+    const dir = path.dirname(outputAbs);
     await fs.promises.mkdir(dir, { recursive: true });
 
     // Write plantuml file
-    const pumlPath = outputPath.replace(/\.(svg|png|pdf)$/, '.puml');
-    await fs.promises.writeFile(pumlPath, source);
+    const pumlAbs = outputAbs.replace(/\.(svg|png|pdf)$/, '.puml');
+    await fs.promises.writeFile(pumlAbs, source);
 
     try {
-      // Try plantuml via java
-      const cmd = `java -jar plantuml.jar -t${this.options.format || 'svg'} "${pumlPath}" -o "${path.dirname(outputPath)}"`;
-      await execAsync(cmd);
+      // Try plantuml via java.
+      // `execFile` tanpa shell: argumen tak bisa diselipkan perintah lain.
+      await execFileAsync(
+        'java',
+        [
+          '-jar', 'plantuml.jar',
+          `-t${this.options.format || 'svg'}`,
+          pumlAbs,
+          '-o', dir,
+        ],
+        { cwd: process.cwd() },
+      );
 
-      const buffer = await fs.promises.readFile(outputPath);
+      const buffer = await fs.promises.readFile(outputAbs);
       return { success: true, outputPath, buffer };
     } catch (error) {
+      const pesanError = error instanceof Error ? error.message : String(error);
       return {
         success: true,
-        outputPath: pumlPath,
+        outputPath: pumlAbs,
         buffer: Buffer.from(source),
-        metadata: { fallback: true, message: 'PlantUML not available, returned source' }
+        metadata: {
+          fallback: true,
+          message:
+            'PlantUML/Java tidak tersedia. Sumber PlantUML dikembalikan sebagai .puml.',
+          detail: pesanError.slice(0, 500),
+        },
       };
     }
   }

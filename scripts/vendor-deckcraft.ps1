@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Unduh binary DeckCraft (storytold/deckcraft) untuk dipakai NitZ-909.
 

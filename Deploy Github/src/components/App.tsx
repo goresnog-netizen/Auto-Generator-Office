@@ -614,6 +614,30 @@ function AppInner() {
   const [modeAutoGenerate, setModeAutoGenerate] = useState<"ganti" | "tambah">(
     "ganti",
   );
+  /**
+   * Riwayat undo khusus Auto-Generate.
+   *
+   * Undo umum (editor.undo()) membatalkan perubahan blok satu per satu —
+   * untuk hasil auto-generate yang terdiri dari puluhan blok, user harus
+   * menekan Undo puluhan kali. Di sini simpan snapshot lengkap
+   * (blocks + judul) tiap kali auto-generate berjalan, sehingga satu klik
+   * Undo mengembalikan keadaan sebelum generate.
+   */
+  const [riwayatAuto, setRiwayatAuto] = useState<
+    { blocks: ContentBlock[]; judul: string }[]
+  >([]);
+  const [indeksAuto, setIndeksAuto] = useState(-1);
+  /**
+   * Mirror riwayat dalam ref.
+   *
+   * Penulisan riwayat harus membaca nilai SEBELUM generate (kondisi kanvas
+   * saat ini) dan menggabungkannya dengan riwayat lama. Kalau dilakukan lewat
+   * state saja, nilai `indeksAuto` di dalam callback bisa basi (React
+   * membatching update), sehingga history bisa tertimpa. Ref selalu
+   * menyimpan nilai terkini.
+   */
+  const riwayatAutoRef = useRef<{ blocks: ContentBlock[]; judul: string }[]>([]);
+  const indeksAutoRef = useRef(-1);
   const [statusEkspor, setStatusEkspor] = useState<
     Record<DocumentType, StatusTombol>
   >({
@@ -3214,6 +3238,16 @@ function AppInner() {
               mode={modeAutoGenerate}
               onMode={setModeAutoGenerate}
               onHasil={(hasil) => {
+                // Simpan keadaan SEBELUM generate supaya Undo bisa
+                // mengembalikan dokumen ke kondisi itu dalam satu klik.
+                const baru = [
+                  ...riwayatAutoRef.current.slice(0, indeksAutoRef.current + 1),
+                  { blocks: klonBlocks(editor.getBlocks()), judul },
+                ].slice(-20);
+                riwayatAutoRef.current = baru;
+                indeksAutoRef.current = baru.length - 1;
+                setRiwayatAuto(baru);
+                setIndeksAuto(baru.length - 1);
                 if (modeAutoGenerate === "tambah") {
                   // Tambahkan di akhir isi yang ada; judul tidak diubah.
                   ubah(() =>
@@ -3228,6 +3262,34 @@ function AppInner() {
                   pesan:
                     `Auto-generate: ${hasil.statistik.totalBlok} blok ` +
                     `${modeAutoGenerate === "tambah" ? "ditambahkan" : "dibuat"} dari prompt.`,
+                });
+              }}
+              bisaUndoAuto={indeksAuto >= 0}
+              bisaRedoAuto={indeksAuto < riwayatAuto.length - 1}
+              onUndoAuto={() => {
+                const i = indeksAutoRef.current;
+                if (i < 0) return;
+                const s = riwayatAutoRef.current[i];
+                ubah(() => editor.setBlocks(klonBlocks(s.blocks)));
+                setJudul(s.judul);
+                indeksAutoRef.current = i - 1;
+                setIndeksAuto(i - 1);
+                setStatusDraf({
+                  state: "sukses",
+                  pesan: "Auto-generate dibatalkan — dokumen dikembalikan.",
+                });
+              }}
+              onRedoAuto={() => {
+                const i = indeksAutoRef.current;
+                if (i >= riwayatAutoRef.current.length - 1) return;
+                const s = riwayatAutoRef.current[i + 1];
+                ubah(() => editor.setBlocks(klonBlocks(s.blocks)));
+                setJudul(s.judul);
+                indeksAutoRef.current = i + 1;
+                setIndeksAuto(i + 1);
+                setStatusDraf({
+                  state: "sukses",
+                  pesan: "Auto-generate dipulihkan.",
                 });
               }}
             />

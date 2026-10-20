@@ -23,6 +23,12 @@ ui-*.png
 kaca-*.png
 noise-*.png
 ui-audit*.png
+ui-modern.png
+bd-dengan-blur.png
+bd-tanpa-blur.png
+suite-out.txt
+suite-run*.txt
+probe-*.mjs
 
 # Temp scripts & dumps (local working files)
 scripts/*
@@ -46,6 +52,8 @@ scripts/*
 !scripts/verifikasi-performa.mjs
 !scripts/verifikasi-pptx-generator.mjs
 !scripts/verifikasi-generators.mjs
+!scripts/verifikasi-pdf-gambar.mjs
+!scripts/verifikasi-fitur-baru.mjs
 !scripts/audit-isi-generator.mjs
 !scripts/audit-negative-test.mjs
 !scripts/ukur-warna.py

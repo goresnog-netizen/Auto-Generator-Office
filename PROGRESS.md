@@ -193,17 +193,130 @@ Hasil per generator:
 - pptx 5 slide + tabel native + teks benar
 
 ## Yang belum selesai
-- Auto-Generate belum punya tombol undo tersendiri.
-- Belum ada CI workflow untuk menjalankan `verify:all` di GitHub Actions.
+- ~~Auto-Generate belum punya tombol undo tersendiri.~~ -> **SELESAI** (Sesi 3).
+- ~~Belum ada CI workflow untuk menjalankan `verify:all` di GitHub Actions.~~ ->
+  **SELESAI** (Sesi 3).
+- Vercel tak bisa menjalankan API DeckCraft (panel menampilkan "Tidak
+  tersedia" + panduan `pnpm serve`/host ber-Node). Ini batasan platform,
+  bukan bug - DeckCraft adalah program native Rust.
+- Diagram butuh mermaid-cli + Chrome; tanpa itu jatuh ke fallback `.mmd`
+  (sekarang pesannya menyebut butir yang kurang secara spesifik).
+- Dukungan font monospace untuk blok kode lewat DeckCraft API.
+- Render pratinjau semua slide (filmstrip) di DeckCraft Studio.
+- Ekspor PDF/GIF lewat DeckCraft (`file.export` mendukung keduanya).
+
+## Sesi 3 (2026-10-21) - 5 item tersisa diselesaikan
+
+### 1. CI GitHub Actions
+- `.github/workflows/ci.yml` - 3 job:
+  - `check`: typecheck (browser/server/node) + vitest + vite build, di
+    ubuntu-latest.
+  - `generators`: verifikasi generator + audit isi + gambar PDF + fitur
+    baru + negative test, di ubuntu-latest.
+  - `deckcraft`: bandingkan id perintah dengan engine asli; **windows-latest**
+    + `pnpm vendor:deckcraft` (binary rilis DeckCraft untuk Windows).
+    `continue-on-error: true` - kegagalan job ini tak memblokir PR, karena
+    bergantung pada ketersediaan rilis binary.
+- Semua langkah pakai `pnpm install --frozen-lockfile`.
+
+### 2. Generator PDF - gambar benar-benar tertanam
+- `src/generators/pdf.ts`: `renderImage` jadi async; `muatGambar()` mendukung
+  data URL (base64), path lokal, `file://`, dan URL http(s).
+- `dimensiGambar()` membaca header PNG (IHDR) & JPEG (marker SOF) sendiri -
+  `doc.image()` pdfkit langsung menggambar dan tak mengembalikan dimensi.
+- SVG / file hilang / format tak didukung -> jatuh ke keterangan teks
+  (`[Gambar tidak dapat ditampilkan: ...]`), bukan crash.
+- Placeholder lama `[Image: ...]` dihapus total.
+- **Bug yang ditemukan & diperbaiki**: variabel salah ketik `joural`
+  (instead of `jalur`) -> semua gambar lokal gagal dimuat, dan exception-nya
+  tertelan `catch` sehingga tak terlihat. Negative test sekarang menutup
+  celah ini.
+
+### 3. Auto-Generate - undo/redo khusus
+- `src/components/AutoGenerate.tsx`: tombol "Batalkan Generate" dan
+  "Ulangi Generate" (hanya tampil saat ada riwayat).
+- `src/components/App.tsx`: snapshot `blocks` + `judul` tiap kali generate.
+- **Riwayat ditulis lewat `useRef`**, bukan state saja: React membatching
+  update, jadi `indeksAuto` di dalam callback bisa basi -> riwayat tertimpa
+  dan undo kehilangan langkah.
+- Batas 20 entri riwayat (snapshot penuh bisa besar).
+- Undo mengembalikan dokumen ke kondisi SEBELUM generate dalam satu klik -
+  beda dari "Urungkan" umum yang membatalkan satu blok per klik.
+
+### 4. Pesan DeckCraft di hosting tanpa API
+- `src/lib/deckcraft-client.ts`: `GalatDeckcraft` (kode status), deteksi
+  respons non-JSON (hosting statis mengembalikan HTML, bukan JSON).
+- `src/components/DeckCraftStudio.tsx`: membedakan dua sebab:
+  - "API DeckCraft tidak ada" -> saran `pnpm serve` / Railway / Render / VPS;
+  - "binary belum terpasang" -> saran `pnpm vendor:deckcraft`.
+  Plus catatan bahwa fitur NitZ-909 lain tetap berfungsi.
+
+### 5. Generator diagram - diagnosis & keamanan
+- Pesan fallback membedakan "mermaid-cli tak ada" vs "Chrome/Chromium tak
+  ditemukan"; detail teknis disimpan terpisah dari pesan user.
+- **Command injection ditutup**: `exec()` (shell) -> `execFile()` (tanpa
+  shell), plus sanitasi judul dokumen sebelum masuk nama berkas.
+- Di Windows, `npx` adalah `.cmd` yang ditolak Node lewat `execFile`
+  (CVE-2024-27980) -> jalankan `npx-cli.js` langsung dengan Node.
+- Path relatif -> absolut (`path.resolve`), karena perintah dijalankan dengan
+  `cwd` sendiri sehingga path relatif tak ketemu.
+
+### 6. Perbaikan infrastruktur verifikasi
+- **Encoding `.ps1`**: Windows PowerShell 5 membaca `.ps1` tanpa BOM sebagai
+  ANSI; em-dash (U+2014) jadi byte 0x94 yang PowerShell anggap smart-quote
+  penutup string -> "The string is missing the terminator".
+  `scripts/perbaiki-encoding.ps1` menulis ulang semua `.ps1` di `scripts/`
+  jadi ASCII + BOM.
+- **Ekstraktor ZIP Node** (`scripts/zip-util.mjs`) menggantikan
+  `Expand-Archive` PowerShell di 4 skrip. Alasannya: path sementara
+  8.3 (`C:\Users\BROKEN~1\...`) tak bisa dibuka PowerShell.
+- `verifikasi-semua.ps1` sekarang menampilkan output juga saat kode keluar
+  != 0 - sebelumnya kegagalan tanpa `[GAGAL]` (exception di tengah skrip)
+  tak terlihat sama sekali.
+- Negative test retry 1x, TETAPI hanya kalau tak ada `[GAGAL]` di output
+  (regresi yang disengaja tak diulang).
+
+### 7. Performa glassmorphism - pengukuran jujur
+- **Blur dibuang dari 32 elemen** yang tak butuh: field form (20: input 10,
+  select 7, textarea 3), kartu statistik dashboard (8), segmented control
+  (2), pita status (1), badge FPS (1).
+  -> **48 -> 16 layer** (2,1% -> 0,7%).
+- **Metrik waktu blur (ms) dihapus.** Alasannya jujur: di headless tanpa GPU
+  tidak ada cara mengukur biaya blur secara kredibel -
+  - `performance.now()` di halaman: dipengaruhi cadence rAF headless
+    (~1 detik/frame);
+  - `Page.captureScreenshot`: raster PNG ~5,7 detik, encoding-nya
+    mendominasi selisih;
+  - `Performance.getMetrics` TaskDuration: tak mencakup kompositing GPU.
+
+  Angka yang dihasilkan berbeda-beda: 6,4 / 12,5 / 21,4 / 66,4 ms untuk
+  kode yang tak berubah. Sekarang diganti metrik **deterministik**:
+  jumlah layer, luas area tercakup blur, dan "tak ada blur pada elemen kecil
+  (< 300x120)".
+- Catatan: metrik waktu yang benar (Chrome Tracing / `long-animation-frame`)
+  hanya bisa dijalankan di mesin dengan GPU sungguhan.
+
+### 8. Skrip verifikasi baru
+- `scripts/verifikasi-pdf-gambar.mjs` (14) - PNG benar-benar tertanam di PDF
+  (XObject `/Subtype /Image`), SVG & file hilang tak crash, data URL jalan.
+- `scripts/verifikasi-fitur-baru.mjs` (35) - CI, undo, pesan DeckCraft,
+  diagnosis diagram, embed gambar PDF. Cek statis (tak perlu browser).
+- `scripts/zip-util.mjs` - ekstraktor ZIP Node murni.
+- `scripts/perbaiki-encoding.ps1` - normalisasi encoding `.ps1`.
+- Negative test naik dari 4 -> 6 kasus (tambah: PDF gambar tak tertanam).
+
+## Status verifikasi terakhir (Sesi 3)
+
+`pnpm verify:all` -> **244 pemeriksaan lulus, 0 gagal**, exit 0
+- typecheck browser + server + node: 0 error
+- 66 unit test lulus
+- build produksi: sukses
+- Negative test: 6 kasus, membuktikan skrip menangkap regresi
 
 ## Catatan metodologi
 Pengukuran performa di headless Chrome tanpa GPU tidak bisa menghitung FPS
-(rAF idle, screencast kosong). Yang bisa diukur: biaya blur lewat selisih
-dua kondisi pada proses yang sama, dengan mengambil nilai terbaik dari 3
-percobaan (noise hanya bisa menambah, bukan mengurangi). Angka "reaktif"
-~150 ms adalah artefak penyimpanan ulang aturan CSS, bukan biaya yang
-dirasakan pengguna.
-3. Auto-Generate mode "tambahkan" (append) dan undo.
-4. Ekspor PDF/GIF lewat DeckCraft (`file.export` mendukung keduanya).
-5. Dukungan font monospace untuk blok kode.
-6. Render pratinjau semua slide (filmstrip) di DeckCraft Studio.
+(rAF idle, screencast kosong) maupun biaya blur dalam ms (lihat Sesi 3 §7).
+Yang bisa diverifikasi: jumlah layer blur, luas area tercakup blur, animasi
+aurora hidup (transform berubah), kontras WCAG dihitung dengan
+mengomposisi leluhur background, dan - lewat negative test - bahwa
+skrip verifikasi benar-benar menangkap regresi saat bug dibalik.

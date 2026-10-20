@@ -81,7 +81,7 @@ export class PDFGenerator implements DocumentGenerator {
       doc.on('data', (chunk: Buffer) => buffers.push(chunk));
 
       // Build PDF content
-      this.buildPDF(doc, content, config);
+      await this.buildPDF(doc, content, config);
 
       doc.end();
 
@@ -108,7 +108,11 @@ export class PDFGenerator implements DocumentGenerator {
     }
   }
 
-  private buildPDF(doc: PDFKit.PDFDocument, content: DocumentContent, config: DocumentConfig): void {
+  private async buildPDF(
+    doc: PDFKit.PDFDocument,
+    content: DocumentContent,
+    config: DocumentConfig,
+  ): Promise<void> {
     // Register fonts (would need actual font files in production)
     // doc.registerFont('Sans', 'path/to/GoogleSans-Regular.ttf');
     // doc.registerFont('Sans-Bold', 'path/to/GoogleSans-Bold.ttf');
@@ -119,7 +123,7 @@ export class PDFGenerator implements DocumentGenerator {
 
     // Content
     for (const block of content.blocks) {
-      this.renderBlock(doc, block);
+      await this.renderBlock(doc, block);
     }
 
     // Add page numbers
@@ -162,7 +166,7 @@ export class PDFGenerator implements DocumentGenerator {
     doc.addPage();
   }
 
-  private renderBlock(doc: PDFKit.PDFDocument, block: ContentBlock): void {
+  private async renderBlock(doc: PDFKit.PDFDocument, block: ContentBlock): Promise<void> {
     switch (block.type) {
       case 'heading':
         this.renderHeading(doc, block as HeadingBlock);
@@ -180,7 +184,7 @@ export class PDFGenerator implements DocumentGenerator {
         this.renderCode(doc, block as CodeBlock);
         break;
       case 'image':
-        this.renderImage(doc, block as ImageBlock);
+        await this.renderImage(doc, block as ImageBlock);
         break;
       case 'chart':
         this.renderChartPlaceholder(doc, block as ChartBlock);
@@ -335,14 +339,160 @@ export class PDFGenerator implements DocumentGenerator {
     doc.moveDown(1);
   }
 
-  private renderImage(doc: PDFKit.PDFDocument, block: ImageBlock): void {
-    // Placeholder for image
+  /**
+   * Ambil byte gambar dari sumber blok.
+   *
+   * Mendukung tiga bentuk:
+   *  - data URL (`data:image/png;base64,...`) — dipakai kanvas browser,
+   *  - path lokal (file:// atau path biasa) — hasil ekspor gambar di disk,
+   *  - URL http(s) — diunduh sekali lalu dipakai.
+   *
+   * Mengembalikan `null` kalau sumber tidak bisa dibaca (mis. SVG, yang
+   * tidak didukung pdfkit, atau file hilang).
+   */
+  private async muatGambar(src: string): Promise<Buffer | null> {
+    if (!src) return null;
+    try {
+      if (src.startsWith('data:')) {
+        const comma = src.indexOf(',');
+        if (comma < 0) return null;
+        const meta = src.slice(0, comma);
+        const isi = src.slice(comma + 1);
+        if (!meta.includes(';base64')) {
+          return Buffer.from(decodeURIComponent(isi), 'utf8');
+        }
+        return Buffer.from(isi, 'base64');
+      }
+
+      if (/^https?:\/\//i.test(src)) {
+        const resp = await fetch(src);
+        if (!resp.ok) return null;
+        const buf = Buffer.from(await resp.arrayBuffer());
+        // PDFKit tak bisa merender SVG; tolak lebih awal.
+        if (buf.subarray(0, 5).toString('latin1').includes('<svg')) return null;
+        return buf;
+      }
+
+      const fs = await import('fs');
+      let jalur = src;
+      if (jalur.startsWith('file://')) {
+        jalur = decodeURIComponent(jalur.replace(/^file:\/\//, ''));
+      }
+      const stat = await fs.promises.stat(jalur);
+      if (!stat.isFile()) return null;
+      return await fs.promises.readFile(jalur);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Baca dimensi gambar dari header berkas.
+   *
+   * `doc.image()` pdfkit langsung menggambar dan tidak mengembalikan dimensi,
+   * jadi dimensinya dibaca manual dari header PNG / JPEG. Format lain
+   * (GIF, BMP, WEBP, SVG) dikembalikan `null` dan akan jatuh ke keterangan.
+   */
+  private dimensiGambar(buf: Buffer): { width: number; height: number } | null {
+    // PNG: 8 byte signature, lalu IHDR chunk dengan width/height 4 byte BE.
+    if (
+      buf.length > 24 &&
+      buf[0] === 0x89 &&
+      buf.toString('ascii', 1, 4) === 'PNG'
+    ) {
+      return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+    }
+    // JPEG: cari marker SOF0..SOF15 (kecuali DHT/DAC/RST).
+    if (buf.length > 4 && buf[0] === 0xff && buf[1] === 0xd8) {
+      let i = 2;
+      while (i + 9 < buf.length) {
+        if (buf[i] !== 0xff) {
+          i++;
+          continue;
+        }
+        const marker = buf[i + 1];
+        // SOF0 (0xc0) .. SOF15 (0xcf), kecuali 0xc4 (DHT), 0xc8 (JPG),
+        // dan 0xcc (DAC).
+        if (
+          marker >= 0xc0 &&
+          marker <= 0xcf &&
+          marker !== 0xc4 &&
+          marker !== 0xc8 &&
+          marker !== 0xcc
+        ) {
+          return { height: buf.readUInt16BE(i + 5), width: buf.readUInt16BE(i + 7) };
+        }
+        const panjangSegmen = buf.readUInt16BE(i + 2);
+        if (panjangSegmen < 2) return null;
+        i += 2 + panjangSegmen;
+      }
+    }
+    return null;
+  }
+
+  private async renderImage(doc: PDFKit.PDFDocument, block: ImageBlock): Promise<void> {
+    const margin = this.options.margins?.left || 72;
+    const areaLebar = doc.page.width - margin * 2;
+
+    const buf = await this.muatGambar(block.src);
+    const dim = buf ? this.dimensiGambar(buf) : null;
+
+    if (!buf || !dim || dim.width <= 0 || dim.height <= 0) {
+      // Sumber tidak bisa dirender (SVG, format tak didukung, file hilang).
+      // Tetap tampilkan keterangan supaya isi dokumen tak hilang.
+      doc.moveDown(0.5);
+      doc.fontSize(12)
+         .font('Helvetica-Oblique')
+         .fillColor('#9E9E9E')
+         .text(`[Gambar tidak dapat ditampilkan: ${block.alt}]`, { align: 'center' });
+      doc.moveDown(1);
+      return;
+    }
+
+    // Skala: patuhi lebar/tinggi yang diminta blok, tapi jangan pernah
+    // melampaui area teks atau tinggi halaman yang tersisa.
+    let lebar = dim.width;
+    let tinggi = dim.height;
+    if (block.width) lebar = block.width;
+    if (block.height) tinggi = block.height;
+    else if (block.width) tinggi = dim.height * (block.width / dim.width);
+    else if (lebar > areaLebar) {
+      tinggi = dim.height * (areaLebar / dim.width);
+      lebar = areaLebar;
+    }
+
+    // Pindah ke halaman baru kalau sisa ruang tak cukup.
+    let sisa = doc.page.maxY() - doc.y - 40;
+    if (tinggi > sisa) {
+      doc.addPage();
+      sisa = doc.page.maxY() - doc.y - 40;
+    }
+    tinggi = Math.min(tinggi, sisa);
+    if (tinggi <= 10) {
+      doc.moveDown(0.5);
+      doc.fontSize(12)
+         .font('Helvetica-Oblique')
+         .fillColor('#9E9E9E')
+         .text(`[Gambar tidak dapat ditampilkan: ${block.alt}]`, { align: 'center' });
+      doc.moveDown(1);
+      return;
+    }
+
     doc.moveDown(0.5);
-    doc.fontSize(12)
-       .font('Helvetica-Oblique')
-       .fillColor('#9E9E9E')
-       .text(`[Image: ${block.alt}]`, { align: 'center' });
-    doc.moveDown(1);
+    const x = margin + (areaLebar - lebar) / 2;
+    doc.image(buf, x, doc.y, { width: lebar, height: tinggi });
+    doc.y += tinggi;
+    doc.moveDown(0.4);
+
+    if (block.caption) {
+      doc.fontSize(9)
+         .font('Helvetica-Oblique')
+         .fillColor('#5C5C66')
+         .text(block.caption, margin, doc.y, { width: areaLebar, align: 'center' });
+      doc.moveDown(0.4);
+    }
+    doc.fillColor('#1A1A1D');
+    doc.moveDown(0.6);
   }
 
   private renderChartPlaceholder(doc: PDFKit.PDFDocument, block: ChartBlock): void {

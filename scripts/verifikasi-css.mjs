@@ -152,6 +152,11 @@ const kondisiLangka = [
   ".dc-kosong",
   ".dc-galat-detail",
   ".dc-gambar-kosong",
+  // Selektor di dalam panel "DeckCraft tidak tersedia" — hanya muncul
+  // bila binary/API DeckCraft absen, bukan pada state default.
+  ".dc-kosong p",
+  ".dc-kosong code",
+  ".dc-catatan",
   ".nitz-isi > .kartu-kaca, .nitz-isi > div > .kartu-kaca",
 ];
 const benarMati = (mati?.mati ?? []).filter((s) => !kondisiLangka.includes(s));

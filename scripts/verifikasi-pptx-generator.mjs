@@ -15,6 +15,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { ekstrakZip } from "./zip-util.mjs";
 
 const cek = (label, ok, detail = "") => {
   console.log(`[${ok ? "OK  " : "GAGAL"}] ${label}${detail ? " — " + detail : ""}`);
@@ -121,16 +122,10 @@ try {
   cek("signature ZIP valid (PK)", buf[0] === 0x50 && buf[1] === 0x4b);
 
   // Ekstrak & periksa XML.
+  // Utilitas ZIP Node, bukan `Expand-Archive` PowerShell (path dengan
+  // spasi / path 8.3 tak selalu bisa dibuka PowerShell).
   const ekstrak = path.join(dir, "x");
-  execFileSync(
-    "powershell",
-    [
-      "-NoProfile",
-      "-Command",
-      `Expand-Archive -Path '${hasil.outputPath}' -DestinationPath '${ekstrak}' -Force`,
-    ],
-    { stdio: "pipe" },
-  );
+  ekstrakZip(hasil.outputPath, ekstrak);
 
   const slideDir = path.join(ekstrak, "ppt", "slides");
   const slideFiles = existsSync(slideDir)

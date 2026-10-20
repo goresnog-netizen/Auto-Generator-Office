@@ -6,15 +6,15 @@
   Folder `Deploy Github/` adalah mirror yang dipush ke GitHub lalu dideploy ke
   Vercel. Supaya tidak divergen, skrip ini menyalin ulang:
 
-    src/            → Deploy Github/src/
-    index.html      → Deploy Github/index.html
-    vite.config.ts  → Deploy Github/vite.config.ts
-    package.json    → Deploy Github/package.json
-    tsconfig.json   → Deploy Github/tsconfig.json
-    vercel.json     → Deploy Github/vercel.json
+    src/             Deploy Github/src/
+    index.html       Deploy Github/index.html
+    vite.config.ts   Deploy Github/vite.config.ts
+    package.json     Deploy Github/package.json
+    tsconfig.json    Deploy Github/tsconfig.json
+    vercel.json      Deploy Github/vercel.json
 
   YANG TIDAK disalin: `server/` (kode Node untuk API DeckCraft). Vercel
-  melayani aplikasi statis, jadi API DeckCraft tidak bisa hidup di sana —
+  melayani aplikasi statis, jadi API DeckCraft tidak bisa hidup di sana -
   panel "DeckCraft Studio" akan tampil "Tidak tersedia" di Vercel dan tetap
   berfungsi penuh di instalasi lokal (server/serve.ts).
 
@@ -23,10 +23,19 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Akar = (Split-Path -Parent $PSScriptRoot)
+  # `$PSScriptRoot` tak selalu terisi di Windows PowerShell 5, jadi
+  # lokasi kerja dipakai sebagai cadangan.
+  [string]$Akar = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($Akar)) {
+  $Akar = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+  if (-not (Test-Path (Join-Path $Akar "package.json"))) {
+    $Akar = Split-Path -Parent (Get-Location).Path
+  }
+}
 
 $target = Join-Path $Akar "Deploy Github"
 if (-not (Test-Path $target)) {
@@ -39,7 +48,7 @@ $srcTarget = Join-Path $target "src"
 
 Copy-Item -Path (Join-Path $srcAsal "*") -Destination $srcTarget -Recurse -Force
 
-# Berkas yang ada di mirror tapi tidak di sumber → hapus.
+# Berkas yang ada di mirror tapi tidak di sumber  hapus.
 $relatifAsal = Get-ChildItem -Recurse -File $srcAsal |
   ForEach-Object { $_.FullName.Substring($srcAsal.Length + 1) }
 $relatifTarget = Get-ChildItem -Recurse -File $srcTarget |

@@ -154,17 +154,28 @@ tanpa itu, noise akan slipping ke belakang root dan tidak terlihat.
 ## Catatan performa
 
 `backdrop-filter` memaksa browser membuat layer kompositing terpisah dan
-mengblur semua yang ada di belakangnya.
+mengblur semua yang ada di belakangnya. Beban ini sebanding dengan **luas
+area** yang dicakup blur, bukan cuma jumlah elemen.
 
 Awalnya ada **215 elemen** (9,4%) yang memakai `backdrop-filter` — 58 kartu
 galeri + 56 tombol + input + sidebar. Audit menemukan ini terlalu mahal:
 blur di permukaan kecil tidak terlihat, tapi biaya kompositingnya nyata.
 
-Setelah perbaikan: **47 elemen (2,1%)**. Yang dibuang:
+Setelah dua putaran perbaikan: **16 elemen (0,7%)**.
 
+Pencatutan pertama (215 → 47) membuang:
 - `.nitz-app-root button` — tombol kecil (26–40 px) tak punya area cukup
   untuk blur terlihat.
 - `.kartu-template` — 58 kartu sekaligus, kartu selebar ~130 px.
+
+Pencatutan kedua (47 → 16, Sesi 3) membuang 32 elemen sisanya:
+- **Field form (20)** — 10 input + 7 select + 3 textarea. Field punya
+  background sendiri yang semi-transparan, jadi blur di belakangnya nyaris
+  tak terlihat, tapi tiap field = satu layer tambahan.
+- **Kartu statistik dashboard (8)** — isinya angka besar; blur di balik
+  angka tak membuatnya lebih terbaca.
+- **Segmented control (2)**, **pita status (1)**, **badge FPS (1)** —
+  semuanya < 300×120 px, terlalu kecil untuk blur terlihat.
 
 `backdrop-filter` tetap dipakai pada permukaan besar yang memang menjadi
 titik fokus: header, sidebar, area isi, kanvas, kartu besar, dialog.
@@ -172,6 +183,29 @@ titik fokus: header, sidebar, area isi, kanvas, kartu besar, dialog.
 Tambahan: `contain: paint` + `content-visibility: auto` pada
 `.galeri-grid`, `.galeri-baris`, `.dc-daftar-slide` supaya repaint saat
 scroll tidak menyentuh seluruh halaman.
+
+### Cara mengukur beban blur dengan jujur
+
+Metrik "biaya blur dalam milidetik" **tidak bisa diukur kredibel di
+headless Chrome tanpa GPU**. Tiga cara yang dicoba semuanya gagal:
+
+| Metode | Hasil | Masalah |
+|---|---|---|
+| `performance.now()` di halaman | 6,4 / 12,5 / 21,4 / 66,4 ms | dipengaruhi cadence rAF headless (~1 detik/frame) |
+| `Page.captureScreenshot` | selisih ~330 ms | raster PNG ~5,7 detik; encoding mendominasi |
+| `Performance.getMetrics` TaskDuration | ~0,12 ms | tak mencakup kompositing GPU |
+
+Empat angka berbeda untuk kode yang **tak berubah** = metrik tak berguna.
+
+Karena itu `scripts/verifikasi-performa.mjs` sekarang memakai metrik
+**deterministik** yang benar-benar mencerminkan beban kompositing:
+
+1. jumlah layer `backdrop-filter` (≤ 20),
+2. luas area yang tercakup blur,
+3. **tak ada blur pada elemen kecil** (< 300×120 px).
+
+Metrik waktu yang benar (Chrome Tracing, `long-animation-frame`) hanya bisa
+dijalankan di mesin dengan GPU sungguhan — bukan di lingkungan CI.
 
 ---
 
@@ -186,7 +220,7 @@ diterima mentah — sebagian ternyata tidak terbukti.
 | Tombol segmented aktif kontras | **1,16:1** ❌ | **9,62:1** ✅ | terbukti, diperbaiki |
 | Garis warna kategori di kartu template | hilang (1px) | 4px + warna ✅ | terbukti, diperbaiki |
 | Card yang jadi kaca | 1 dari 12 | 10 dari 12 ✅ | terbukti, diperbaiki |
-| Elemen ber-`backdrop-filter` | 215 | 47 ✅ | terbukti, diperbaiki |
+| Elemen ber-`backdrop-filter` | 215 | **16** ✅ | terbukti, diperbaiki (2 putaran) |
 | Label kecil di bawah AA | klaim 3,08:1 | **terukur 7,35:1** ✅ | tidak terbukti |
 | Noise overlay tak terlihat | klaim "tak pernah render" | **terlihat (delta 11,7%)** ✅ | tidak terbukti |
 | Tanpa `backdrop-filter`, teks tak terbaca | klaim 1,43:1 | **terukur 7,35:1** ✅ | tidak terbukti |

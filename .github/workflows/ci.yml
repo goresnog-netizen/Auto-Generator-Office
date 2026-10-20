@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+# Batalkan eksekusi lama kalau ada commit baru di branch yang sama.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Typecheck + unit test + build: bagian yang sepenuhnya lintas-platform.
+  check:
+    name: Typecheck, test & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck (browser)
+        run: pnpm exec tsc --noEmit
+
+      - name: Typecheck (server)
+        run: pnpm exec tsc --noEmit -p tsconfig.server.json
+
+      - name: Typecheck (node)
+        run: pnpm exec tsc --noEmit -p tsconfig.node.json
+
+      - name: Unit test
+        run: pnpm exec vitest run --reporter=dot
+
+      - name: Build
+        run: pnpm exec vite build
+
+  # Generator Node: menulis berkas docx/xlsx/pdf/diagram sungguhan.
+  # Tidak butuh DeckCraft binary, jadi aman di runner Linux.
+  generators:
+    name: Generator menulis berkas nyata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generator (struktur & validitas berkas)
+        run: node scripts/verifikasi-generators.mjs
+
+      - name: Audit isi generator (konten bermakna)
+        run: node scripts/audit-isi-generator.mjs
+
+      - name: Verifikasi gambar tertanam di PDF
+        run: node scripts/verifikasi-pdf-gambar.mjs
+
+      - name: Verifikasi fitur baru (CI, undo, pesan, diagram)
+        run: node scripts/verifikasi-fitur-baru.mjs
+
+      - name: Negative test (skrip menangkap regresi)
+        run: node scripts/audit-negative-test.mjs
+
+  # Perintah DeckCraft dibandingkan dengan engine asli. Butuh binary
+  # DeckCraft, jadi khusus runner Windows (binary rilis hanya Windows/Linux
+  # — pakai Windows supaya identik dengan mesin pengembangan).
+  deckcraft:
+    name: Perintah vs engine DeckCraft
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Unduh binary DeckCraft
+        shell: pwsh
+        run: ./scripts/vendor-deckcraft.ps1
+
+      - name: Bandingkan id perintah dengan engine
+        run: node scripts/verifikasi-perintah.mjs
+
+      - name: Uji end-to-end bridge DeckCraft
+        run: node --experimental-strip-types scripts/verify-deckcraft.mts
