@@ -227,10 +227,42 @@ export interface LaporanMetadata {
 }
 
 /* ===== GENERATOR TYPES ===== */
+/**
+ * Opsi dasar generator.
+ *
+ * `format` sengaja TIDAK ada di sini: tiap generator punya format
+ * outputnya sendiri (docx/png/pdf/...), jadi declaring `format` di base
+ * akan bentrok dengan `extends` di tiap generator.
+ */
 export interface GeneratorOptions {
   outputPath: string;
-  format?: "buffer" | "file" | "stream";
   theme?: ThemeConfig;
+}
+
+/**
+ * Kontrak semua generator dokumen.
+ *
+ * Ditempatkan di sini (bukan di `src/index.ts`) supaya generator Node bisa
+ * mengimpornya tanpa memutar siklus: `src/index.ts` meng-export modul ini
+ * sekaligus membuat instance generator, sedangkan modul ini hanya berisi
+ * tipe.
+ */
+export interface DocumentGenerator {
+  generate(
+    config: DocumentConfig,
+    content: DocumentContent,
+  ): Promise<GeneratorResult>;
+  validate(
+    config: DocumentConfig,
+    content: DocumentContent,
+  ): ValidationResult;
+}
+
+/** Hasil validasi: daftar error ( Fatal) dan peringatan (Warning). */
+export interface ValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
 }
 
 export interface GeneratorResult {
@@ -511,6 +543,8 @@ export interface GeneratorSettings {
 }
 
 export interface PDFGeneratorOptions extends Omit<GeneratorOptions, "format"> {
+  /** Ukuran kertas (bukan format berkas — PDF selalu .pdf). */
+  format?: "A4" | "Letter" | "Legal";
   paperSize?: "A4" | "Letter" | "Legal";
   orientation?: "portrait" | "landscape";
   margins?: { top: number; right: number; bottom: number; left: number };

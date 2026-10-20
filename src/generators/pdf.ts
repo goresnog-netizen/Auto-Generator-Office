@@ -18,12 +18,10 @@ import {
   CodeBlock,
   ImageBlock,
   ChartBlock,
-  DiagramBlock,
-  DividerBlock
-} from '../types';
+  DiagramBlock
+} from '../types/index.ts';
 
 import PDFDocument from 'pdfkit';
-import { Writable } from 'stream';
 
 export class PDFGenerator implements DocumentGenerator {
   private defaultOptions: PDFGeneratorOptions = {
@@ -33,7 +31,9 @@ export class PDFGenerator implements DocumentGenerator {
     margins: { top: 72, right: 72, bottom: 72, left: 72 }
   };
 
-  constructor(private options: PDFGeneratorOptions = {}) {
+  private options: PDFGeneratorOptions;
+
+  constructor(options: PDFGeneratorOptions = { outputPath: '' }) {
     this.options = { ...this.defaultOptions, ...options };
   }
 
@@ -63,6 +63,10 @@ export class PDFGenerator implements DocumentGenerator {
         size: this.options.format,
         layout: this.options.orientation,
         margins: this.options.margins,
+        // Tanpa ini pdfkit langsung membuang halaman yang sudah ditulis,
+        // sehingga `switchToPage()` untuk nomor halaman melempar
+        // "out of bounds".
+        bufferPages: true,
         info: {
           Title: config.title,
           Author: config.metadata?.author || 'NitZ-909',
@@ -88,10 +92,6 @@ export class PDFGenerator implements DocumentGenerator {
       });
 
       const buffer = Buffer.concat(buffers);
-
-      if (this.options.format === 'buffer') {
-        return { success: true, buffer };
-      }
 
       if (this.options.outputPath) {
         const fs = await import('fs');
@@ -256,7 +256,7 @@ export class PDFGenerator implements DocumentGenerator {
     let x = this.options.margins?.left || 72;
     const y = doc.y;
 
-    block.headers.forEach((header, i) => {
+    block.headers.forEach((header) => {
       doc.rect(x, y, colWidth, 20).fill('#1A1A1D');
       doc.fillColor('#FFFFFF')
          .text(header, x + 4, y + 4, { width: colWidth - 8, align: 'center' });
@@ -278,7 +278,7 @@ export class PDFGenerator implements DocumentGenerator {
         doc.rect(x, doc.y, pageWidth, 18).fill('#F5F5F5');
       }
 
-      row.forEach((cell, i) => {
+      row.forEach((cell) => {
         doc.fillColor('#1A1A1D')
            .text(cell, x + 4, doc.y + 2, { width: colWidth - 8, align: 'left' });
         x += colWidth;
@@ -373,12 +373,15 @@ export class PDFGenerator implements DocumentGenerator {
 
   private addPageNumbers(doc: PDFKit.PDFDocument): void {
     const pages = doc.bufferedPageRange();
-    if (!pages) return;
+    if (!pages || pages.count === 0) return;
 
     const pageCount = pages.count;
 
     for (let i = 0; i < pageCount; i++) {
-      doc.switchToPage(i);
+      // `switchToPage` memakai indeks absolut halaman, sedangkan
+      // `bufferedPageRange().start` memberi nomor halaman pertama yang
+      // masih ada di buffer.
+      doc.switchToPage(pages.start + i);
       doc.fontSize(9)
          .font('Helvetica')
          .fillColor('#9E9E9E')

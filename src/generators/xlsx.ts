@@ -1,6 +1,15 @@
 /**
  * XLSX Document Generator
  * Uses exceljs for Excel document generation
+ *
+ * Catatan API exceljs v4:
+ *  - Properti dokumen (`title`, `creator`) ada di `workbook`, bukan di
+ *    `workbook.properties` (yang di tipe hanya berisi `date1904`).
+ *  - Nilai sel harus berupa primitive / `richText` / `hyperlink` / `formula`.
+ *    Objek `{ text, font }` TIDAK dikenali exceljs dan akan ditulis sebagai
+ *    JSON mentah, jadi gaya sel diterapkan terpisah lewat `cell.font`,
+ *    `cell.fill`, dan `cell.alignment`.
+ *  - Warna memakai `argb` (ARGB 8 digit), bukan `rgb`.
  */
 
 import {
@@ -20,30 +29,42 @@ import {
   ChartBlock,
   DiagramBlock,
   DividerBlock,
-  TextFormatting,
-  SheetConfig,
-  SheetStyles,
-  CellStyle,
-  BorderStyle,
-  BorderEdge,
-  TableConfig,
-  TableStyle,
-  ChartConfig,
-} from "../types";
+} from "../types/index.ts";
 
 import ExcelJS from "exceljs";
+
+/** Warna aksen NitZ-909 (ARGB). */
+const WARNA_AKSEN = "FF5E774E";
+const WARNA_HEADER = "FF1A1A1D";
+const WARNA_BARIS_ALTERNATIF = "FFF3F6F1";
+
+/** Gaya sel yang bisa diterapkan. */
+interface GayaSel {
+  bold?: boolean;
+  size?: number;
+  warna?: string;
+  isian?: string;
+  rata?: "left" | "center" | "right";
+}
+
+/** Satu sel spreadsheet: nilai primitif + gaya opsional. */
+interface Sel {
+  nilai: string | number | boolean | null;
+  gaya?: GayaSel;
+}
+
+/** Spesifikasi satu lembar kerja sebelum ditulis ke workbook. */
+interface Lembar {
+  name: string;
+  tabColor?: string;
+  rows: Sel[][];
+}
 
 export class XLSXGenerator implements DocumentGenerator {
   private options: XLSXGeneratorOptions;
 
-  constructor(private optionsParam: XLSXGeneratorOptions = {}) {
-    this.options = {
-      outputPath: "",
-      format: "sheet" as const,
-      template: {},
-      theme: {},
-      ...optionsParam,
-    };
+  constructor(options: XLSXGeneratorOptions = { outputPath: '', sheets: [] }) {
+    this.options = { ...options };
   }
 
   validate(config: DocumentConfig, content: DocumentContent): ValidationResult {
@@ -72,29 +93,30 @@ export class XLSXGenerator implements DocumentGenerator {
     try {
       const workbook = new ExcelJS.Workbook();
 
-      // Set default theme colors
-      workbook.properties.title = config.title || "NitZ-909 Spreadsheet";
-      workbook.properties.creator = "NitZ-909";
+      // Properti dokumen pada exceljs v4 ada di workbook, bukan di
+      // `.properties` (yang di tipe hanya berisi date1904 & friends).
+      workbook.title = config.title || "NitZ-909 Spreadsheet";
+      workbook.creator = "NitZ-909";
 
-      const sheets: any[] = [];
+      const lembar: Lembar[] = [];
+
+      // Lembar yang diminta lewat opsi (SheetConfig) didahulukan.
+      for (const cfg of this.options.sheets ?? []) {
+        lembar.push(this.sheetFromConfig(cfg));
+      }
 
       for (const block of content.blocks) {
         const rendered = this.renderBlock(block);
-        if (rendered && rendered.sheet) {
-          sheets.push(rendered.sheet);
-        }
+        if (rendered) lembar.push(rendered);
       }
 
       // If no sheets generated, create a default data sheet
-      if (sheets.length === 0) {
-        sheets.push(this.createDefaultSheet(config));
+      if (lembar.length === 0) {
+        lembar.push(this.createDefaultSheet(config));
       }
 
-      for (const sheet of sheets) {
-        workbook.addWorksheet(sheet.name, sheet.properties);
-        sheet.rows.forEach((row) => {
-          worksheet.addRow(row);
-        });
+      for (const spec of lembar) {
+        this.tulisLembar(workbook, spec);
       }
 
       // Apply styles if provided
@@ -102,11 +124,9 @@ export class XLSXGenerator implements DocumentGenerator {
         this.applyThemeColors(workbook, this.options.theme);
       }
 
-      const buffer = await workbook.xlsx.writeBuffer();
-
-      if (this.options.format === "buffer") {
-        return { success: true, buffer };
-      }
+      // exceljs v4 `writeBuffer()` mengembalikan ArrayBuffer; Buffer.from
+      // membuatnya kompatibel dengan tipe GeneratorResult.
+      const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
 
       if (this.options.outputPath) {
         const fs = await import("fs");
@@ -114,7 +134,7 @@ export class XLSXGenerator implements DocumentGenerator {
         return { success: true, outputPath: this.options.outputPath };
       }
 
-      return { success: true, outputPath: config.title + ".xlsx" };
+      return { success: true, buffer };
     } catch (error) {
       return {
         success: false,
@@ -126,7 +146,40 @@ export class XLSXGenerator implements DocumentGenerator {
     }
   }
 
-  private renderBlock(block: ContentBlock): any {
+  /** Tulis satu lembar ke workbook: nilai sel lalu gaya sel. */
+  private tulisLembar(workbook: ExcelJS.Workbook, spec: Lembar): void {
+    const worksheet = workbook.addWorksheet(spec.name);
+    if (spec.tabColor) {
+      worksheet.properties.tabColor = { argb: spec.tabColor };
+    }
+
+    for (const row of spec.rows) {
+      const excelRow = worksheet.addRow(row.map((sel) => sel.nilai));
+      row.forEach((sel, index) => {
+        if (!sel.gaya) return;
+        const cell = excelRow.getCell(index + 1);
+        if (sel.gaya.bold !== undefined || sel.gaya.size !== undefined || sel.gaya.warna) {
+          cell.font = {
+            ...(sel.gaya.bold !== undefined ? { bold: sel.gaya.bold } : {}),
+            ...(sel.gaya.size !== undefined ? { size: sel.gaya.size } : {}),
+            ...(sel.gaya.warna ? { color: { argb: sel.gaya.warna } } : {}),
+          };
+        }
+        if (sel.gaya.isian) {
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: sel.gaya.isian },
+          };
+        }
+        if (sel.gaya.rata) {
+          cell.alignment = { horizontal: sel.gaya.rata };
+        }
+      });
+    }
+  }
+
+  private renderBlock(block: ContentBlock): Lembar | null {
     switch (block.type) {
       case "heading":
         return this.renderHeadingBlock(block as HeadingBlock);
@@ -151,28 +204,34 @@ export class XLSXGenerator implements DocumentGenerator {
     }
   }
 
-  private renderHeadingBlock(block: HeadingBlock): any {
+  private renderHeadingBlock(block: HeadingBlock): Lembar {
     const level = block.level || 1;
     const text = block.text || "Heading";
 
     return {
-      name: `Section ${level}`,
-      properties: { tabColor: { rgb: "1A1A1D" } },
       name: `Heading ${level}`,
-      rows: [[{ text, font: { bold: level <= 2, size: 14 - level * 2 } }]],
+      tabColor: WARNA_AKSEN,
+      rows: [
+        [
+          {
+            nilai: text,
+            gaya: { bold: true, size: Math.max(11, 14 - level * 2), warna: "FFFFFFFF" },
+          },
+        ],
+      ],
     };
   }
 
-  private renderParagraphBlock(block: ParagraphBlock): any {
+  private renderParagraphBlock(block: ParagraphBlock): Lembar {
     const text = block.text || "";
 
     return {
       name: "Data",
-      rows: [[{ text }]],
+      rows: [[{ nilai: text }]],
     };
   }
 
-  private renderListBlock(block: ListBlock): any {
+  private renderListBlock(block: ListBlock): Lembar {
     const items: string[] = [];
 
     block.items.forEach((item) => {
@@ -183,98 +242,138 @@ export class XLSXGenerator implements DocumentGenerator {
 
     return {
       name: "List",
-      rows: items.map((text) => [{ text }]),
+      rows: items.map((text) => [{ nilai: text }]),
     };
   }
 
-  private renderTableBlock(block: TableBlock): any {
-    if (!block.headers || block.headers.length === 0)
+  private renderTableBlock(block: TableBlock): Lembar {
+    if (!block.headers || block.headers.length === 0) {
       return { name: "Table", rows: [] };
+    }
 
-    const columns = block.headers.length;
-    const data: any[] = [];
+    const rows: Sel[][] = [];
 
     // Header row
-    data.push([
-      ...block.headers.map((h) => ({
-        text: h,
-        font: { bold: true, color: { rgb: "FFFFFF" } },
+    rows.push(
+      block.headers.map((h) => ({
+        nilai: h,
+        gaya: { bold: true, warna: "FFFFFFFF", isian: WARNA_HEADER, rata: "center" as const },
       })),
-    ]);
+    );
 
     // Data rows
-    block.rows.forEach((row) => {
-      data.push(row.map((cell) => ({ text: cell || "" })));
+    block.rows.forEach((row, rowIndex) => {
+      rows.push(
+        row.map((cell) => ({
+          nilai: cell || "",
+          gaya:
+            rowIndex % 2 === 0
+              ? { isian: WARNA_BARIS_ALTERNATIF }
+              : undefined,
+        })),
+      );
     });
 
     return {
       name: "Table",
-      properties: { tabColor: { rgb: "1A1A1D" } },
-      rows: data,
+      tabColor: WARNA_AKSEN,
+      rows,
     };
   }
 
-  private renderCodeBlock(block: CodeBlock): any {
+  private renderCodeBlock(block: CodeBlock): Lembar {
     const lines = block.code?.split("\n") || ["// No code"];
 
     return {
       name: "Code",
-      rows: lines.map((line) => [{ text: line }]),
+      rows: lines.map((line) => [
+        { nilai: line, gaya: { isian: "FFF2F4F1" } },
+      ]),
     };
   }
 
-  private renderImageBlock(block: ImageBlock): any {
+  private renderImageBlock(block: ImageBlock): Lembar {
     return {
       name: "Image",
-      rows: [[{ text: `[Image: ${block.alt || "Image"}]` }]],
+      rows: [[{ nilai: `[Image: ${block.alt || "Image"}]` }]],
     };
   }
 
-  private renderChartBlock(block: ChartBlock): any {
+  private renderChartBlock(block: ChartBlock): Lembar {
     const chartType = block.chartType || "chart";
 
     return {
       name: "Chart",
-      rows: [[{ text: `[${chartType} chart]` }]],
+      rows: [[{ nilai: `[${chartType} chart]` }]],
     };
   }
 
-  private renderDiagramBlock(block: DiagramBlock): any {
+  private renderDiagramBlock(block: DiagramBlock): Lembar {
     const diagramType = block.diagramType || "diagram";
 
     return {
       name: "Diagram",
-      rows: [[{ text: `[${diagramType} diagram]` }]],
+      rows: [[{ nilai: `[${diagramType} diagram]` }]],
     };
   }
 
-  private renderDividerBlock(block: DividerBlock): any {
+  private renderDividerBlock(block: DividerBlock): Lembar {
+    void block;
     return {
       name: "Divider",
-      rows: [[{ text: "────────────────────────────────" }]],
+      rows: [[{ nilai: "────────────────────────────────" }]],
     };
   }
 
-  private createDefaultSheet(config: DocumentConfig): any {
+  /** Bangun lembar dari `SheetConfig` yang diberikan lewat opsi generator. */
+  private sheetFromConfig(cfg: {
+    name: string;
+    data: unknown[][];
+    headers?: string[];
+  }): Lembar {
+    const rows: Sel[][] = [];
+
+    if (cfg.headers?.length) {
+      rows.push(
+        cfg.headers.map((h) => ({
+          nilai: h,
+          gaya: { bold: true, warna: "FFFFFFFF", isian: WARNA_HEADER },
+        })),
+      );
+    }
+
+    for (const row of cfg.data ?? []) {
+      rows.push(
+        (row as unknown[]).map((value) => ({
+          nilai: value === null || value === undefined ? "" : (value as string | number | boolean),
+        })),
+      );
+    }
+
+    return { name: cfg.name, tabColor: WARNA_AKSEN, rows };
+  }
+
+  private createDefaultSheet(config: DocumentConfig): Lembar {
     return {
       name: config.title || "Sheet1",
-      properties: { tabColor: { rgb: "1A1A1D" } },
+      tabColor: WARNA_AKSEN,
       rows: [
         [
           {
-            text: "NitZ-909 Data",
-            font: { bold: true, color: { rgb: "FFFFFF" } },
+            nilai: "NitZ-909 Data",
+            gaya: { bold: true, warna: "FFFFFFFF", isian: WARNA_HEADER },
           },
         ],
       ],
-      tables: [],
     };
   }
 
-  private applyThemeColors(workbook: any, theme: any): void {
-    // Apply theme colors to workbook properties
-    if (workbook.properties) {
-      workbook.properties.theme = theme;
+  private applyThemeColors(workbook: ExcelJS.Workbook, theme: unknown): void {
+    // `workbook.properties` pada exceljs v4 hanya berisi `date1904`; tema
+    // dokumen lebih tepat dicatat lewat `workbook.theme`.
+    const tema = theme as { primaryColor?: string } | undefined;
+    if (tema?.primaryColor) {
+      (workbook as unknown as { theme?: unknown }).theme = { primaryColor: tema.primaryColor };
     }
   }
 }

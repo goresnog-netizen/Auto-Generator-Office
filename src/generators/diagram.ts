@@ -12,7 +12,7 @@ import {
   GeneratorOptions,
   DiagramBlock,
   ChartBlock
-} from '../types';
+} from '../types/index.ts';
 
 import { promisify } from 'util';
 import { exec } from 'child_process';

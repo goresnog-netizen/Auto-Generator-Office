@@ -29,7 +29,7 @@ import type {
   ListBlock,
   PPTXGeneratorOptions,
   TableBlock,
-} from "../types";
+} from "../types/index.ts";
 
 /** Palet yang selaras dengan `src/lib/exporter.ts` supaya kedua jalur serasi. */
 const WARNA = {

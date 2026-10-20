@@ -1,6 +1,11 @@
 /**
  * Word Document Generator
  * Uses docx library for Word document generation
+ *
+ * Catatan API: `docx` v9 memakai kelas-kelas baru —
+ * `TableRow`/`TableCell` (bukan `Row`/`Cell`), `HeadingLevel` (bukan
+ * `Heading`), `AlignmentType` (bukan `Alignment`), dan `TextRun`/`Paragraph`
+ * menerima objek opsi (bukan properti yang bisa di-set setelah pembuatan).
  */
 
 import {
@@ -10,9 +15,6 @@ import {
   GeneratorResult,
   ValidationResult,
   WordGeneratorOptions,
-  WordStyles,
-  WordStyle,
-  WordTableStyle,
   ContentBlock,
   HeadingBlock,
   ParagraphBlock,
@@ -23,37 +25,55 @@ import {
   ChartBlock,
   DiagramBlock,
   DividerBlock,
-  TextFormatting,
-} from "../types";
+} from "../types/index.ts";
 
 import {
   Packer,
-  XmlText,
   Paragraph,
   TextRun,
   Document,
-  Section,
-  PageBreak,
   Table as DOCXTable,
-  Row,
-  Cell,
-  Heading as DOCXHeading,
-  Alignment,
-  VerticalAlign,
-  Width,
-  Color,
-  DocumentLevel,
+  TableRow,
+  TableCell,
+  AlignmentType,
+  WidthType,
+  ShadingType,
+  HeadingLevel,
+  LevelFormat,
+  convertMillimetersToTwip,
+  type FileChild,
+  type IRunOptions,
 } from "docx";
+
+/** Level heading (1–6) ke enum HeadingLevel docx. */
+const LEVEL_HEADING = [
+  HeadingLevel.HEADING_1,
+  HeadingLevel.HEADING_2,
+  HeadingLevel.HEADING_3,
+  HeadingLevel.HEADING_4,
+  HeadingLevel.HEADING_5,
+  HeadingLevel.HEADING_6,
+] as const;
+
+/** Reference numbering yang didaftarkan di `Document({ numbering })`. */
+const REFERENCE_BERURUTAN = "list-berurutan";
+const REFERENCE_TANPA_URUTAN = "list-tanpa-urutan";
+
+/** Peta alignment NitZ-909 → docx. */
+const PETA_ALIGNMENT: Record<string, (typeof AlignmentType)[keyof typeof AlignmentType]> = {
+  left: AlignmentType.LEFT,
+  center: AlignmentType.CENTER,
+  right: AlignmentType.RIGHT,
+  justify: AlignmentType.JUSTIFIED,
+};
 
 export class WordGenerator implements DocumentGenerator {
   private options: WordGeneratorOptions;
 
-  constructor(private optionsParam: WordGeneratorOptions = {}) {
+  constructor(options: WordGeneratorOptions = { outputPath: "" }) {
     this.options = {
-      outputPath: "",
-      format: "buffer" as const,
-      theme: {},
-      ...optionsParam,
+      template: options.template ?? "",
+      ...options,
     };
   }
 
@@ -81,18 +101,18 @@ export class WordGenerator implements DocumentGenerator {
     content: DocumentContent,
   ): Promise<GeneratorResult> {
     try {
-      const body: any[] = [];
+      const body: FileChild[] = [];
 
       for (const block of content.blocks) {
         const rendered = this.renderBlock(block);
         if (Array.isArray(rendered)) {
           body.push(...rendered);
-        } else {
+        } else if (rendered) {
           body.push(rendered);
         }
       }
 
-      // Add title page if configured
+      // Halaman judul bila ada metadata author.
       if (config.metadata?.author) {
         const titlePage = this.createTitlePage(config);
         if (titlePage) body.unshift(titlePage);
@@ -100,24 +120,64 @@ export class WordGenerator implements DocumentGenerator {
 
       const doc = new Document({
         title: config.title,
+        creator: config.metadata?.author,
+        description: config.metadata?.description,
+        // Reference numbering WAJIB didaftarkan di sini; kalau tidak,
+        // docx menulis numId literal ("{list-tanpa-urutan-0}") dan dokumen
+        // tidak bisa dibuka Word.
+        numbering: {
+          config: [
+            {
+              reference: REFERENCE_BERURUTAN,
+              levels: [
+                {
+                  level: 0,
+                  format: LevelFormat.DECIMAL,
+                  text: "%1.",
+                  alignment: AlignmentType.START,
+                },
+                {
+                  level: 1,
+                  format: LevelFormat.LOWER_LETTER,
+                  text: "%2)",
+                  alignment: AlignmentType.START,
+                },
+              ],
+            },
+            {
+              reference: REFERENCE_TANPA_URUTAN,
+              levels: [
+                {
+                  level: 0,
+                  format: LevelFormat.BULLET,
+                  text: "•",
+                  alignment: AlignmentType.START,
+                },
+                {
+                  level: 1,
+                  format: LevelFormat.BULLET,
+                  text: "◦",
+                  alignment: AlignmentType.START,
+                },
+              ],
+            },
+          ],
+        },
         sections: [
           {
             properties: {},
-            body,
+            children: body,
           },
         ],
       });
 
       const buffer = await Packer.toBuffer(doc);
 
-      if (this.options.format === "buffer") {
-        return { success: true, buffer };
-      }
-
       if (this.options.outputPath) {
         const fs = await import("fs");
-        await fs.promises.writeFile(this.options.outputPath, buffer);
-        return { success: true, outputPath: this.options.outputPath };
+        const outputPath = this.options.outputPath;
+        await fs.promises.writeFile(outputPath, buffer);
+        return { success: true, outputPath, buffer };
       }
 
       return { success: true, buffer };
@@ -132,7 +192,7 @@ export class WordGenerator implements DocumentGenerator {
     }
   }
 
-  private renderBlock(block: ContentBlock): any {
+  private renderBlock(block: ContentBlock): FileChild | FileChild[] | null {
     switch (block.type) {
       case "heading":
         return this.renderHeading(block as HeadingBlock);
@@ -153,240 +213,177 @@ export class WordGenerator implements DocumentGenerator {
       case "divider":
         return this.renderDivider(block as DividerBlock);
       default:
-        return this.renderParagraph({
-          type: "paragraph",
-          text: JSON.stringify(block),
-        });
+        return null;
     }
   }
 
-  private renderHeading(block: HeadingBlock): any {
-    const textRun: TextRun = { text: block.text };
-
-    if (block.formatting?.bold) {
-      textRun.bold = true;
-    }
-    if (block.formatting?.italic) {
-      textRun.italic = true;
-    }
-    if (block.formatting?.underline) {
-      textRun.underline = true;
-    }
-    if (block.formatting?.strikethrough) {
-      textRun.strike = true;
-    }
-    if (block.formatting?.code) {
-      textRun.code = true;
-    }
-
-    const style: WordStyle = {
-      fontSize: this.getFontSize(block.level),
-      bold: block.level <= 3,
-      color: "#1A1A1D",
+  /** Opsi run teks dari `TextFormatting` (bila ada). */
+  private opsiRun(formatting?: {
+    bold?: boolean;
+    italic?: boolean;
+    underline?: boolean;
+    strikethrough?: boolean;
+    code?: boolean;
+  }): IRunOptions {
+    // Properti IRunOptions bersifat read-only, jadi bangun objek baru.
+    return {
+      ...(formatting?.bold ? { bold: true } : {}),
+      ...(formatting?.italic ? { italics: true } : {}),
+      ...(formatting?.underline ? { underline: {} } : {}),
+      ...(formatting?.strikethrough ? { strike: true } : {}),
+      ...(formatting?.code ? { font: "Courier New", size: 20 } : {}),
     };
-
-    if (block.formatting?.link) {
-      style.fontFamily = "Calibri";
-      // Note: hyperlink would need separate handling
-    }
-
-    const heading = new DOCXHeading(block.level, textRun, style);
-    return heading;
   }
 
-  private renderParagraph(block: ParagraphBlock): any {
-    const text = block.text || "";
-    const textRun: TextRun = { text };
-
-    if (block.formatting?.bold) {
-      textRun.bold = true;
-    }
-    if (block.formatting?.italic) {
-      textRun.italic = true;
-    }
-    if (block.formatting?.underline) {
-      textRun.underline = true;
-    }
-    if (block.formatting?.strikethrough) {
-      textRun.strike = true;
-    }
-    if (block.formatting?.code) {
-      textRun.code = true;
-    }
-    if (block.formatting?.link) {
-      // Would need hyperlink element
-    }
-
-    // Apply color if specified
-    if (block.formatting?.color) {
-      // Color handling
-    }
-
-    const paragraph = new Paragraph([textRun]);
-    return paragraph;
+  private renderHeading(block: HeadingBlock): FileChild {
+    const level = Math.min(Math.max(block.level, 1), 6);
+    return new Paragraph({
+      text: block.text,
+      heading: LEVEL_HEADING[level - 1],
+      spacing: { before: 240, after: 120 },
+    });
   }
 
-  private renderList(block: ListBlock): any {
-    const items: any[] = [];
+  private renderParagraph(block: ParagraphBlock): FileChild {
+    return new Paragraph({
+      children: [new TextRun({ text: block.text || "", ...this.opsiRun(block.formatting) })],
+      alignment: PETA_ALIGNMENT[block.formatting?.link ? "left" : "left"],
+    });
+  }
 
-    block.items.forEach((item, index) => {
-      const text = item.text || "";
-      const textRun: TextRun = { text };
-
-      if (item.formatting?.bold) {
-        textRun.bold = true;
+  private renderList(block: ListBlock): FileChild[] {
+    const keluar: FileChild[] = [];
+    const tulis = (items: ListBlock["items"], level: number) => {
+      for (const item of items) {
+        keluar.push(
+          new Paragraph({
+            children: [new TextRun({ text: item.text })],
+            // Hanya `numbering` — memakai `bullet` bersamaan akan menulis
+            // <w:numPr> dua kali dan merusak dokumen.
+            numbering: {
+              reference: block.ordered
+                ? REFERENCE_BERURUTAN
+                : REFERENCE_TANPA_URUTAN,
+              level,
+            },
+          }),
+        );
+        if (item.children?.length) tulis(item.children, level + 1);
       }
-      if (item.formatting?.italic) {
-        textRun.italic = true;
-      }
-
-      const bullet = block.ordered
-        ? new TextRun(`${index + 1}. `)
-        : new TextRun("• ");
-
-      const paragraph = new Paragraph([bullet, textRun]);
-      items.push(paragraph);
-    });
-
-    return items;
-  }
-
-  private renderTable(block: TableBlock): any {
-    if (!block.headers || block.headers.length === 0) return [];
-
-    const rows: any[] = [];
-
-    // Header row
-    const headerCells: any[] = [];
-    block.headers.forEach((header) => {
-      const textRun: TextRun = { text: header };
-      const cell = new Cell({
-        children: [textRun],
-        shading: {
-          fill: "1A1A1D",
-        },
-        color: new Color("#FFFFFF"),
-        width: {
-          size: 50,
-          type: "pct",
-        },
-      });
-      headerCells.push(cell);
-    });
-
-    const headerRow = new Row({ children: headerCells });
-    rows.push(headerRow);
-
-    // Data rows
-    block.rows.forEach((row, rowIndex) => {
-      const dataCells: any[] = [];
-      row.forEach((cellText, i) => {
-        const textRun: TextRun = { text: cellText || "" };
-        const cell = new Cell({
-          children: [textRun],
-          shading: {
-            fill: rowIndex % 2 === 0 ? "F5F5F5" : "FFFFFF",
-          },
-        });
-        dataCells.push(cell);
-      });
-
-      const dataRow = new Row({ children: dataCells });
-      rows.push(dataRow);
-    });
-
-    // Create table
-    const table = new DOCXTable({
-      rows,
-      columnWidths: ["33.33%", "33.33%", "33.34%"],
-    });
-
-    return table;
-  }
-
-  private renderCode(block: CodeBlock): any {
-    const lines = block.code.split("\n");
-    const linesElements: any[] = [];
-
-    // Add background
-    lines.forEach((line, i) => {
-      const textRun: TextRun = { text: line || "" };
-      const paragraph = new Paragraph([textRun]);
-      linesElements.push(paragraph);
-    });
-
-    return linesElements;
-  }
-
-  private renderImage(block: ImageBlock): any {
-    // Placeholder - in production would embed actual image
-    const textRun: TextRun = { text: `[Image: ${block.alt || "Image"}` };
-    const paragraph = new Paragraph([textRun]);
-    return paragraph;
-  }
-
-  private renderChartPlaceholder(block: ChartBlock): any {
-    const textRun: TextRun = { text: `[Chart: ${block.chartType}` };
-    const paragraph = new Paragraph([textRun]);
-    return paragraph;
-  }
-
-  private renderDiagramPlaceholder(block: DiagramBlock): any {
-    const textRun: TextRun = { text: `[Diagram: ${block.diagramType}` };
-    const paragraph = new Paragraph([textRun]);
-    return paragraph;
-  }
-
-  private renderDivider(block: DividerBlock): any {
-    const textRun: TextRun = { text: "────────────────────────────────" };
-    const paragraph = new Paragraph([textRun]);
-    paragraph.props = { alignment: Alignment.CENTER };
-    return paragraph;
-  }
-
-  private getFontSize(level: number): number {
-    const sizes: Record<number, number> = {
-      1: 24,
-      2: 20,
-      3: 18,
-      4: 16,
-      5: 14,
-      6: 12,
     };
-    return sizes[level] || 16;
+    tulis(block.items, 0);
+    return keluar;
   }
 
-  private createTitlePage(config: DocumentConfig): any {
-    try {
-      const { title } = config;
-      if (!title) return null;
+  private renderTable(block: TableBlock): FileChild[] {
+    const lebar = convertMillimetersToTwip(170);
+    const baris = new TableRow({
+      children: block.headers.map(
+        (h) =>
+          new TableCell({
+            children: [
+              new Paragraph({
+                children: [new TextRun({ text: h, bold: true, color: "FFFFFF" })],
+              }),
+            ],
+            width: { size: lebar / block.headers.length, type: WidthType.DXA },
+            shading: { fill: "5E774E", type: ShadingType.CLEAR },
+          }),
+      ),
+    });
+    const isi = block.rows.map(
+      (r, i) =>
+        new TableRow({
+          children: r.map(
+            (sel) =>
+              new TableCell({
+                children: [new Paragraph({ children: [new TextRun({ text: sel })] })],
+                width: { size: lebar / block.headers.length, type: WidthType.DXA },
+                shading:
+                  i % 2 === 0
+                    ? { fill: "F3F6F1", type: ShadingType.CLEAR }
+                    : undefined,
+              }),
+          ),
+        }),
+    );
+    return [
+      new DOCXTable({
+        rows: [baris, ...isi],
+        width: { size: lebar, type: WidthType.DXA },
+      }) as unknown as FileChild,
+      new Paragraph({ text: "" }),
+    ];
+  }
 
-      const titleRun: TextRun = { text: title, bold: true, size: 36 };
-      const subtitleRun: TextRun = {
-        text: config.metadata?.description || "",
-        size: 16,
-      };
+  private renderCode(block: CodeBlock): FileChild {
+    return new Paragraph({
+      children: [
+        new TextRun({
+          text: block.code,
+          font: "Courier New",
+          size: 18,
+        }),
+      ],
+      shading: { fill: "F2F4F1", type: ShadingType.CLEAR },
+    });
+  }
 
-      const titleHeading = new DOCXHeading(0, titleRun, {
-        fontSize: 36,
-        bold: true,
-        color: "#1A1A1D",
-        alignment: Alignment.CENTER,
-      });
+  private renderImage(block: ImageBlock): FileChild {
+    // Gambar butuh unduhan & embedding; tampilkan keterangan + sumber.
+    return new Paragraph({
+      children: [
+        new TextRun({
+          text: `[Gambar: ${block.alt || block.caption || "tanpa keterangan"}]`,
+          italics: true,
+          color: "6B7280",
+        }),
+      ],
+    });
+  }
 
-      const subtitleParagraph = new Paragraph([subtitleRun]);
-      subtitleParagraph.props = { alignment: Alignment.CENTER };
+  private renderChartPlaceholder(block: ChartBlock): FileChild {
+    const seri = block.data.datasets
+      .map((d) => `${d.label}: ${d.data.join(", ")}`)
+      .join(" | ");
+    return new Paragraph({
+      children: [
+        new TextRun({
+          text: `[Grafik ${block.chartType} — ${block.data.labels.join(", ")}] ${seri}`,
+          italics: true,
+          color: "6B7280",
+        }),
+      ],
+    });
+  }
 
-      const authorParagraph = new Paragraph([
-        new TextRun(`By ${config.metadata?.author || ""}`),
-      ]);
-      authorParagraph.props = { alignment: Alignment.CENTER };
+  private renderDiagramPlaceholder(block: DiagramBlock): FileChild {
+    return new Paragraph({
+      children: [
+        new TextRun({
+          text: `[Diagram ${block.diagramType}]\n${block.source}`,
+          font: "Courier New",
+          size: 18,
+        }),
+      ],
+    });
+  }
 
-      // Add page break before content
-      return new PageBreak();
-    } catch {
-      return null;
-    }
+  private renderDivider(block: DividerBlock): FileChild {
+    void block;
+    return new Paragraph({
+      children: [new TextRun({ text: "─".repeat(50), color: "D9E2D2" })],
+    });
+  }
+
+  private createTitlePage(config: DocumentConfig): FileChild | null {
+    if (!config.title) return null;
+    return new Paragraph({
+      children: [new TextRun({ text: config.title, bold: true, size: 48 })],
+      heading: HeadingLevel.TITLE,
+      alignment: AlignmentType.CENTER,
+      pageBreakBefore: false,
+    });
   }
 }
 

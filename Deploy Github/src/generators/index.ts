@@ -16,7 +16,7 @@ import { PDFGenerator } from './pdf';
 import { DiagramGenerator } from './diagram';
 
 import { NitZ909, DocumentGenerator, DocumentConfig, DocumentContent, GeneratorResult } from '../index';
-import { ThemeTokens } from '../types';
+import { ThemeTokens } from '../types/index.ts';
 
 /**
  * Create a fully configured NitZ-909 instance with all generators

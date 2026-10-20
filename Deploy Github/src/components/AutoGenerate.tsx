@@ -35,6 +35,10 @@ export interface AutoGenerateProps {
   /** Dipanggil dengan hasil generate; biasanya mengisi kanvas. */
   onHasil: (hasil: HasilOtomatis) => void;
   onPesan?: (pesan: string) => void;
+  /** Mode placement hasil: ganti seluruh kanvas, atau tambahkan di akhir. */
+  mode?: "ganti" | "tambah";
+  /** Callback saat pengguna mengubah mode placement. */
+  onMode?: (mode: "ganti" | "tambah") => void;
 }
 
 export function AutoGenerate({
@@ -44,6 +48,8 @@ export function AutoGenerate({
   apiKey,
   baseUrl,
   judul,
+  mode = "ganti",
+  onMode,
   onHasil,
   onPesan,
 }: AutoGenerateProps) {
@@ -138,8 +144,7 @@ export function AutoGenerate({
             ...PERSONAS.map((p) => ({ value: p.id, label: p.nama })),
           ]}
           onChange={(v) => setPersona(v as PersonaId | "")}
-        />
-        <Select
+        />        <Select
           label="Jumlah bagian"
           value={String(jumlahBagian)}
           options={[3, 4, 5, 6, 7, 8].map((n) => ({
@@ -161,6 +166,36 @@ export function AutoGenerate({
           <small>Bukan hanya teks — agar bisa jadi deck yang kaya.</small>
         </span>
       </label>
+
+      <div
+        className="ag-segmen"
+        role="radiogroup"
+        aria-label="Cara hasil Placement ke kanvas"
+      >
+        <button
+          type="button"
+          role="radio"
+          aria-checked={mode === "ganti"}
+          className={mode === "ganti" ? "aktif" : ""}
+          onClick={() => onMode?.("ganti")}
+        >
+          Ganti kanvas
+        </button>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={mode === "tambah"}
+          className={mode === "tambah" ? "aktif" : ""}
+          onClick={() => onMode?.("tambah")}
+        >
+          Tambahkan
+        </button>
+      </div>
+      <p className="ag-deskripsi">
+        {mode === "ganti"
+          ? "Hasil akan menggantikan seluruh isi kanvas."
+          : "Hasil akan ditambahkan di akhir isi kanvas yang ada."}
+      </p>
 
       <Button
         type="primary"

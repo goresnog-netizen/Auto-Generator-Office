@@ -543,6 +543,8 @@ export interface GeneratorSettings {
 }
 
 export interface PDFGeneratorOptions extends Omit<GeneratorOptions, "format"> {
+  /** Ukuran kertas (bukan format berkas — PDF selalu .pdf). */
+  format?: "A4" | "Letter" | "Legal";
   paperSize?: "A4" | "Letter" | "Legal";
   orientation?: "portrait" | "landscape";
   margins?: { top: number; right: number; bottom: number; left: number };
