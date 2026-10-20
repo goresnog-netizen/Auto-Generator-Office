@@ -26,6 +26,7 @@
     "verify:pptx-generator": "node scripts/verifikasi-pptx-generator.mjs",
     "verify:generators": "node scripts/verifikasi-generators.mjs",
     "audit:generators": "node scripts/audit-isi-generator.mjs",
+    "audit:negative": "node scripts/audit-negative-test.mjs",
     "verify:backdrop": "node scripts/verifikasi-backdrop.mjs",
     "verify:performa": "node scripts/verifikasi-performa.mjs",
     "verify:all": "powershell -ExecutionPolicy Bypass -File scripts/verifikasi-semua.ps1",

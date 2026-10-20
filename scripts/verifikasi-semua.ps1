@@ -17,8 +17,15 @@ function Jalankan($nama, $perintah, $argumen) {
   $keluaran = & $perintah @argumen 2>&1
   $kode = $LASTEXITCODE
   $teks = ($keluaran | Out-String)
-  $gagal = ([regex]::Matches($teks, '\[GAGAL\]')).Count
   $lulus = ([regex]::Matches($teks, '\[OK  \]')).Count
+  # Negative test sengaja mencetak baris "[GAGAL]" — itu BUKUKAN kegagalan
+  # suite, tapi bukti bahwa skrip menangkap regresi. Yang menentukan lulus
+  # atau tidak di sana adalah kode keluar skrip-nya.
+  $gagal = ([regex]::Matches($teks, '\[GAGAL\]')).Count
+  $negative = $nama -like '*Negative test*'
+  if ($negative) {
+    $gagal = 0
+  }
   $script:hasil += [pscustomobject]@{
     Nama   = $nama
     Kode   = $kode
@@ -34,10 +41,12 @@ function Jalankan($nama, $perintah, $argumen) {
 
 Jalankan "Typecheck (browser)" "npx" @("tsc", "--noEmit")
 Jalankan "Typecheck (server)" "npx" @("tsc", "--noEmit", "-p", "tsconfig.server.json")
+Jalankan "Typecheck (node)" "npx" @("tsc", "--noEmit", "-p", "tsconfig.node.json")
 Jalankan "Unit test" "npx" @("vitest", "run", "--reporter=dot")
 Jalankan "Bridge DeckCraft (Node)" "node" @("scripts/verify-deckcraft.mts")
 Jalankan "Generator Node (tulis file nyata)" "node" @("scripts/verifikasi-generators.mjs")
 Jalankan "Audit isi generator (konten bermakna)" "node" @("scripts/audit-isi-generator.mjs")
+Jalankan "Negative test (skrip tangkap regresi)" "node" @("scripts/audit-negative-test.mjs")
 Jalankan "Id perintah vs engine" "node" @("scripts/verifikasi-perintah.mjs")
 Jalankan "Isi PPTX" "node" @("scripts/verifikasi-pptx.mjs")
 

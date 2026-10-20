@@ -163,6 +163,9 @@ Bug runtime yang tak terlihat tsc, ditemukan lewat smoke test:
 - **pdf.ts**: tanpa `bufferPages: true`, `switchToPage()` melempar
   "out of bounds" → `generate()` selalu gagal, tak menulis apa pun.
   `switchToPage(pages.start + i)` juga wajib (indeks absolut).
+  Nomor halaman harus ditulis DI DALAM area teks
+  (`doc.page.maxY() - 20`); kalau di `page.height - 50`, pdfkit menambah
+  halaman kosong otomatis (2 halaman → 4, nomor halaman salah).
 - **xlsx.ts**: exceljs v4 tak kenal objek `{text, font}` sebagai nilai sel →
   jatuh ke tipe JSON, konten praktis hilang. Diganti: nilai primitif +
   gaya via `cell.font`/`cell.fill`/`cell.alignment`, warna `argb`.
@@ -171,12 +174,21 @@ Bug runtime yang tak terlihat tsc, ditemukan lewat smoke test:
   `numId="{list-tanpa-urutan-0}"` dan .docx rusak di Word. `bullet:` dan
   `numbering:` tak boleh dipakai bersamaan (dua `<w:numPr>`).
 
-Diverifikasi `scripts/verifikasi-generators.mjs` (31 pemeriksaan) +
-`scripts/audit-isi-generator.mjs` (16 pemeriksaan — isi dokumen dibaca &
-dicek kata kuncinya, bukan cuma valid secara struktural):
+Diverifikasi berlapis:
+1. `scripts/verifikasi-generators.mjs` (33 pemeriksaan) — struktur +
+   **ekstraksi teks PDF** (inflate Flate + decode array TJ) + konsistensi
+   nomor halaman vs jumlah halaman.
+2. `scripts/audit-isi-generator.mjs` (16 pemeriksaan) — isi dokumen dibaca
+   & dicek kata kuncinya, bukan cuma valid secara struktural.
+3. `scripts/audit-negative-test.mjs` (4 pemeriksaan) — **negative test**:
+   balik 3 bug yang pernah ada satu per satu, pastikan skrip GAGAL
+   (exit 1), lalu kembalikan. Semua 3 tertangkap. Ini bukti skrip
+   verifikasinya berguna, bukan sekadar formalitas.
+
+Hasil per generator:
 - word .docx 10.133 B (memuat "Laporan Uji", "Poin satu", "nilai 1", "const a = 1")
 - xlsx .xlsx 10.404 B (7 sheet, sharedStrings berisi teks asli)
-- pdf .pdf 3.330 B (3 halaman, header %PDF, %%EOF)
+- pdf .pdf 2.905 B (2 halaman, nomor halaman konsisten, teks terekstraksi)
 - diagram .svg 10.468 B (ter-render, bukan sumber .mmd)
 - pptx 5 slide + tabel native + teks benar
 
