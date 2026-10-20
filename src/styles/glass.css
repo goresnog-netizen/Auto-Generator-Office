@@ -1,0 +1,717 @@
+/* =========================================================================
+   Glassmorphism — lapisan optik NitZ-909
+   -------------------------------------------------------------------------
+   Prinsip: permukaan app jadipanel kaca semi-transparan yang menumpuk di atas
+   latar bergradasi. Efek kaca butuh dua hal yang sering hilang:
+   1. `backdrop-filter: blur()` — isi di belakang ikut diburam.
+   2. Garis sorot tipis di tepi atas + border putih transparan — meniru tepi
+      kaca yang menangkap cahaya.
+   Tanpa keduanya, hasilnya hanya "kartu semi transparan", bukan kaca.
+
+   Semua nilai warna memakai `color-mix()` dari token yang sudah ada, jadi
+   tema terang/gelap dan varian warna (hutan/biru/senja/…) tetap ikut.
+   ========================================================================= */
+
+/* ===== TOKEN KACA ===== */
+:root {
+  /* Ketebalanlapisan kaca */
+  --glass-blur: 18px;
+  --glass-saturate: 140%;
+
+  /* Isi panel: warna app + kabut.
+     Persentase sengaja rendah (26–62%) agar isi di belakang benar-benar
+     terlihat THROUGH panel — inilah yang membedakan kaca dari sekadar
+     kotak semi transparan. */
+  --glass-bg: color-mix(in srgb, var(--surface) 38%, transparent);
+  --glass-bg-strong: color-mix(in srgb, var(--surface-2) 62%, transparent);
+  --glass-bg-subtle: color-mix(in srgb, var(--surface) 26%, transparent);
+
+  /* Tepi: garis sorot atas + border */
+  --glass-border: color-mix(in srgb, white 22%, var(--border));
+  --glass-highlight: inset 0 1px 0 color-mix(in srgb, white 30%, transparent);
+  --glass-edge: inset 0 0 0 1px color-mix(in srgb, white 10%, transparent);
+
+  /* Bayangan: dua lapis (ambien + kunci) supaya panel tampak terangkat */
+  --glass-shadow:
+    0 1px 2px color-mix(in srgb, var(--shadow) 26%, transparent),
+    0 10px 30px color-mix(in srgb, var(--shadow) 34%, transparent);
+  --glass-shadow-lg:
+    0 2px 4px color-mix(in srgb, var(--shadow) 24%, transparent),
+    0 18px 56px color-mix(in srgb, var(--shadow) 44%, transparent);
+
+  /* Sudut membulat lebih besar: kacamodern jarang bersudut tajam */
+  --glass-radius: 16px;
+  --glass-radius-sm: 12px;
+}
+
+:root[data-theme="light"] {
+  --glass-bg: color-mix(in srgb, white 52%, transparent);
+  --glass-bg-strong: color-mix(in srgb, white 74%, transparent);
+  --glass-bg-subtle: color-mix(in srgb, white 38%, transparent);
+  --glass-border: color-mix(in srgb, white 82%, var(--border));
+  --glass-highlight: inset 0 1px 0 color-mix(in srgb, white 96%, transparent);
+  --glass-edge: inset 0 0 0 1px color-mix(in srgb, white 62%, transparent);
+  --glass-shadow:
+    0 1px 2px color-mix(in srgb, var(--shadow) 12%, transparent),
+    0 10px 30px color-mix(in srgb, var(--shadow) 18%, transparent);
+  --glass-shadow-lg:
+    0 2px 4px color-mix(in srgb, var(--shadow) 12%, transparent),
+    0 18px 56px color-mix(in srgb, var(--shadow) 26%, transparent);
+}
+
+/* ===== LATAR: GRADIENT MESH YANG MEMBERI MAKANAN UNTUK KACA =====
+   Tanpa warna-warna bergerak di belakang, blur() tidak punya efek apa pun.
+   Mesh ini memakai blob brand + aksen; `--brand` ikut berubah saat varian
+   warna diganti, jadi seluruh aplikasi berubah warna bersama-sama. */
+.nitz-app-root {
+  position: relative;
+  isolation: isolate;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(
+      1000px 600px at 85% -10%,
+      color-mix(in srgb, var(--brand) 46%, transparent),
+      transparent 66%
+    ),
+    radial-gradient(
+      900px 700px at -8% 28%,
+      color-mix(in srgb, var(--brand-1) 40%, transparent),
+      transparent 68%
+    ),
+    radial-gradient(
+      820px 560px at 55% 112%,
+      color-mix(in srgb, var(--brand-2) 38%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      640px 420px at 20% 88%,
+      color-mix(in srgb, var(--accent) 26%, transparent),
+      transparent 68%
+    ),
+    radial-gradient(
+      560px 380px at 95% 60%,
+      color-mix(in srgb, var(--brand-3) 18%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--brand) 16%, var(--bg)) 0%,
+      var(--bg) 40%,
+      color-mix(in srgb, #000 22%, var(--bg)) 100%
+    );
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+:root[data-theme="light"] .nitz-app-root {
+  background-image:
+    radial-gradient(
+      1000px 600px at 85% -10%,
+      color-mix(in srgb, var(--brand) 58%, transparent),
+      transparent 66%
+    ),
+    radial-gradient(
+      900px 700px at -8% 28%,
+      color-mix(in srgb, var(--brand-1) 44%, transparent),
+      transparent 68%
+    ),
+    radial-gradient(
+      820px 560px at 55% 112%,
+      color-mix(in srgb, var(--brand-2) 40%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      640px 420px at 20% 88%,
+      color-mix(in srgb, var(--accent) 24%, transparent),
+      transparent 68%
+    ),
+    radial-gradient(
+      560px 380px at 95% 60%,
+      color-mix(in srgb, var(--brand-3) 30%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--brand) 24%, var(--bg)) 0%,
+      var(--bg) 42%,
+      color-mix(in srgb, var(--brand-1) 18%, var(--bg)) 100%
+    );
+}
+
+/* Butiran halus di atas gradien:noise halus ini yang membuat kaca terasa
+   seperti bahan nyata, bukan sekadar kotak buram. */
+.nitz-app-root::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+:root[data-theme="light"] .nitz-app-root::before {
+  opacity: 0.28;
+}
+
+/* ===== PERMUKAAN KACA DASAR =====
+   Aturan yang bisa dipakai ulang: `glass` (kaca), `glass-strong` (kaca pekat),
+   `glass-subtle` (kaca tipis).
+   Ini API publik untuk developer — dipakai lewat `className="glass"` pada
+   elemen baru. `Card` memakai `.kartu-kaca` (yang hidup). */
+.glass,
+.glass-strong,
+.glass-subtle {
+  -webkit-backdrop-filter: blur(var(--glass-blur))
+    saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-highlight), var(--glass-edge), var(--glass-shadow);
+  position: relative;
+}
+.glass {
+  background: var(--glass-bg);
+  border-radius: var(--glass-radius);
+}
+.glass-strong {
+  background: var(--glass-bg-strong);
+  border-radius: var(--glass-radius);
+}
+.glass-subtle {
+  background: var(--glass-bg-subtle);
+  border-radius: var(--glass-radius-sm);
+}
+
+/* ===== KEPALA APLIKASI: KACA TEBAL =====
+   Header menempel di atas; kaca di sini harus cukup pekat supaya teks
+   tetap terbaca saat halaman digulir. */
+.nitz-header {
+  background-color: transparent;
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface) 78%, transparent),
+    color-mix(in srgb, var(--surface) 58%, transparent)
+  );
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  backdrop-filter: blur(20px) saturate(150%);
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: var(--glass-highlight), 0 4px 20px color-mix(in srgb, var(--shadow) 18%, transparent);
+}
+/* Mesh header tinggal sebagai aksen tipis di atas kaca. */
+.nitz-header::before {
+  opacity: 0.75;
+}
+
+/* ===== PANEL SAMPING (SIDEBAR) ===== */
+.nitz-side {
+  background-color: transparent;
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface) 52%, transparent),
+    color-mix(in srgb, var(--surface) 34%, transparent)
+  );
+  -webkit-backdrop-filter: blur(16px) saturate(135%);
+  backdrop-filter: blur(16px) saturate(135%);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-highlight);
+}
+
+/* ===== KARTU: KACA LEMBUT =====
+   `Card` memakai inline style, jadi gaya kaca masuk lewat selector yang
+   menimpa background/border/radius inline lewat `!important` pada
+   properti yang tidak bisa di-atur inline tanpa!important. */
+.kartu-kaca,
+.dc-kartu {
+  background: var(--glass-bg) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--glass-radius) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--glass-highlight), var(--glass-edge), var(--glass-shadow) !important;
+}
+
+/* Kartu galeri template: kaca yang bisa "menyala" saat dipilih.
+   PENTING: jangan pakai shorthand `border` di sini — warna kategori tiap
+   kartu datang dari inline `borderLeft: 4px solid <warna>` (App.tsx), dan
+   shorthand akan mereset keempat sisi, menghapus penanda kategori itu.
+   Yang di-override hanya lebar & gaya; WARNA sisi kiri dibiarkan inline. */
+.kartu-template {
+  background: var(--glass-bg) !important;
+  border-width: 1px !important;
+  border-style: solid !important;
+  border-color: var(--glass-border) !important;
+  /* Tanpa backdrop-filter: 58 kartu sekaligus = 58 layer blur, dan blur
+     sebesar ini tidak terbaca di kartu selebar ~130 px. Permukaan besar
+     (header, sidebar, area isi) tetap berkaca. */
+  box-shadow: var(--glass-highlight), var(--glass-edge),
+    0 4px 16px color-mix(in srgb, var(--shadow) 20%, transparent) !important;
+  transition:
+    transform 0.18s var(--panel-motion-ease),
+    box-shadow 0.18s var(--panel-motion-ease),
+    border-color 0.18s var(--panel-motion-ease),
+    background 0.18s var(--panel-motion-ease);
+}
+/* Sisi kiri dikembalikan ke lebar aslinya (4px) supaya penanda kategori
+   tetap terlihat di atas kaca. */
+.kartu-template {
+  border-left-width: 4px !important;
+}
+.kartu-template:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--glass-border)) !important;
+  box-shadow: var(--glass-highlight), var(--glass-edge),
+    0 12px 30px color-mix(in srgb, var(--shadow) 30%, transparent) !important;
+}
+/* Status "sedang dipakai" ditandai lewat kelas, bukan selector attribute
+   fragile seperti `style*="1.5px solid"` (tidak pernah match). */
+.kartu-template.terpakai {
+  border-color: var(--brand) !important;
+  box-shadow: var(--glass-highlight), var(--glass-edge),
+    0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent),
+    0 12px 30px color-mix(in srgb, var(--shadow) 30%, transparent) !important;
+}
+
+/* ===== KARTU STATISTIK DASHBOARD ===== */
+.dash-card,
+.stat-kotak {
+  background: var(--glass-bg) !important;
+  border: 1px solid var(--glass-border) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(125%);
+  backdrop-filter: blur(12px) saturate(125%);
+  box-shadow: var(--glass-highlight), var(--glass-edge),
+    0 2px 10px color-mix(in srgb, var(--shadow) 16%, transparent) !important;
+}
+
+/* ===== SEGMENTED CONTROL (tampilan galeri / dashboard) ===== */
+.segmen-tampilan,
+.segmen-dashboard {
+  background: var(--glass-bg-subtle) !important;
+  border: 1px solid var(--glass-border) !important;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--glass-highlight), inset 0 1px 2px color-mix(in srgb, var(--shadow) 12%, transparent) !important;
+}
+.segmen-tampilan button,
+.segmen-dashboard button {
+  border-radius: calc(var(--radius) - 2px) !important;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.segmen-tampilan button.aktif,
+.segmen-dashboard button.aktif {
+  /* Latar tetap SOLID --brand (bukan film 24%): teksnya --primary-action-text
+     yang gelap, jadi film bening membuat kontras jatuh ke ~1,2:1 dan label
+     "Ringkas/Lengkap" tak terbaca. */
+  background: var(--brand) !important;
+  color: var(--primary-action-text) !important;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 18%, transparent),
+    0 1px 4px color-mix(in srgb, var(--shadow) 22%, transparent) !important;
+}
+
+/* ===== TOMBOL: CAHAYA, TANPA BLUR =====
+   Tombol kecil (26–40 px) tidak punya area cukup besar untuk blur terlihat,
+   tapi tetap dipaksa browser membuat layer kompositing + snapshot backdrop.
+   Dengan 56+ tombol di app, itu biaya besar tanpa imbalan visual.
+   Blur tetap dipakai pada permukaan besar: header, sidebar, kartu besar. */
+.nitz-app-root button[type="button"] {
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.12s ease;
+}
+.nitz-app-root button[type="button"]:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+/* ===== INPUT / SELECT / TEXTAREA: KACA TEBAL (harus tetap terbaca) ===== */
+.nitz-app-root input,
+.nitz-app-root select,
+.nitz-app-root textarea {
+  background: var(--glass-bg-strong) !important;
+  border: 1px solid var(--glass-border) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(130%);
+  backdrop-filter: blur(12px) saturate(130%);
+  box-shadow: var(--glass-highlight), inset 0 1px 3px color-mix(in srgb, var(--shadow) 14%, transparent) !important;
+  border-radius: var(--radius) !important;
+}
+.nitz-app-root input:focus,
+.nitz-app-root select:focus,
+.nitz-app-root textarea:focus {
+  border-color: color-mix(in srgb, var(--brand) 55%, var(--glass-border)) !important;
+  box-shadow: var(--glass-highlight),
+    0 0 0 3px color-mix(in srgb, var(--brand) 20%, transparent) !important;
+}
+
+/* ===== DIALOG / TUR: KACA TEBAL + BAYANGAN BESAR ===== */
+[role="dialog"] {
+  background: var(--glass-bg-strong) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  backdrop-filter: blur(22px) saturate(160%);
+  border: 1px solid var(--glass-border) !important;
+  box-shadow: var(--glass-highlight), var(--glass-edge), var(--glass-shadow-lg) !important;
+  border-radius: var(--glass-radius) !important;
+}
+
+/* ===== AREA KANVAS: KACA BESAR =====
+   Kanvas dokumen adalah tempat mata tertuju; ia jadi "kaca-sheet" yang
+   melayang di atas latar mesh.
+   `.editor-canvas` adalah nama kelas yang BENAR dipakai di App.tsx
+   (className="editor-canvas"); `.nitz-kanvas` & `.kanvas-editor` tidak
+   pernah muncul di kode, jadi tidak dicantumkan di sini. */
+.nitz-isi,
+.editor-canvas {
+  background: var(--glass-bg) !important;
+  border: 1px solid var(--glass-border) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: var(--glass-highlight), var(--glass-edge), var(--glass-shadow-lg) !important;
+  border-radius: var(--glass-radius) !important;
+}
+
+/* Kartu yang membungkus dokumen di area tengah: kaca penuh. */
+.nitz-isi > .kartu-kaca,
+.nitz-isi > div > .kartu-kaca {
+  background: var(--glass-bg-strong) !important;
+}
+
+/* Latar panel tengah sedikit lebih pekat supaya teks panjang tetap nyaman
+   dibaca di atas mesh yang berwarna.
+   CATATAN: `.nitz-isi` sendiri sudah berkaca (blur 16px). Pseudo-lapis ini
+   TIDAK menambah blur kedua — hanya tint + garis sorot. Dua blur bertumpuk
+   di permukaan terbesar di layar itu mahal dan memunculkan pita buram ganda. */
+.nitz-isi {
+  position: relative;
+}
+.nitz-isi::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--bg) 42%, transparent);
+  border-radius: inherit;
+  border-top: 1px solid var(--glass-highlight);
+  box-shadow: var(--glass-shadow-lg);
+}
+.nitz-isi > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ===== DAFTAR GALERI: BATASI KERJA REPAINT =====
+   `contain: paint` memberitahu browser bahwa isi galeri tidak memengaruhi
+   bagian luar — repaint saat scroll tidak lagi menyentuh seluruh halaman. */
+.galeri-grid,
+.galeri-baris,
+.dc-daftar-slide {
+  contain: paint;
+  content-visibility: auto;
+}
+
+/* ===== DECKCRAFT STUDIO ===== */
+.dc-studio {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.dc-kepala {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.dc-kepala-judul {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-ui);
+}
+.dc-pita {
+  font-size: var(--font-size-caption);
+  padding: 2px 8px;
+  border-radius: var(--radius-round);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg-subtle);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+}
+.dc-pita-ok {
+  color: var(--success-text);
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+.dc-pita-galat {
+  color: var(--danger-text);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+.dc-kendali {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.dc-tombol-baris {
+  display: flex;
+  gap: var(--space-2);
+}
+.dc-tombol-baris > * {
+  flex: 1;
+}
+.dc-pesan {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--muted);
+  line-height: 1.5;
+}
+.dc-pesan-galat {
+  color: var(--danger-text);
+}
+.dc-kosong {
+  font-size: var(--font-size-caption);
+  color: var(--muted);
+  line-height: 1.6;
+}
+.dc-galat-detail {
+  display: block;
+  margin-top: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger-text);
+  font-size: 10px;
+  word-break: break-word;
+}
+/* Lembar pratinjau: "kaca-sheet" di atas panel kaca → efek berlapis. */
+.dc-lembar {
+  position: relative;
+  border-radius: var(--glass-radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  background: color-mix(in srgb, #000 24%, transparent);
+  box-shadow: var(--glass-highlight), 0 6px 18px color-mix(in srgb, var(--shadow) 26%, transparent);
+}
+:root[data-theme="light"] .dc-lembar {
+  background: color-mix(in srgb, white 70%, transparent);
+}
+.dc-gambar {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+}
+.dc-gambar-kosong {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: var(--font-size-caption);
+}
+.dc-daftar-slide {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.dc-item-slide {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  text-align: left;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--font-size-caption);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.dc-item-slide:hover {
+  background: var(--glass-bg-subtle);
+  color: var(--text);
+}
+.dc-item-slide.aktif {
+  background: color-mix(in srgb, var(--brand) 20%, transparent);
+  border-color: color-mix(in srgb, var(--brand) 45%, transparent);
+  color: var(--text);
+}
+.dc-item-nomor {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--muted);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+.dc-item-slide.aktif .dc-item-nomor {
+  background: var(--brand);
+  color: var(--primary-action-text);
+}
+.dc-item-judul {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ===== AUTO-GENERATE ===== */
+.ag-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.ag-kepala {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-ui);
+}
+.ag-pita {
+  margin-left: auto;
+  font-size: var(--font-size-caption);
+  padding: 2px 8px;
+  border-radius: var(--radius-round);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg-subtle);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.ag-deskripsi {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--muted);
+  line-height: 1.6;
+}
+.ag-kendali {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+/* Kolom ketiga (jumlah bagian) memanjang penuh ke baris berikutnya. */
+.ag-kendali > *:last-child {
+  grid-column: 1 / -1;
+}
+.ag-centang {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--font-size-caption);
+  color: var(--text);
+  cursor: pointer;
+  line-height: 1.5;
+}
+.ag-centang input {
+  margin-top: 2px;
+  accent-color: var(--brand);
+  flex-shrink: 0;
+}
+.ag-centang span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ag-centang small {
+  color: var(--muted);
+  font-size: var(--font-size-caption);
+}
+.ag-pesan {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--success-text);
+  line-height: 1.5;
+}
+.ag-galat {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--danger-text);
+  line-height: 1.5;
+}
+/* Kartu auto-generate: kaca sedikit lebih pekat supaya textarea jelas. */
+.ag-kartu {
+  background: var(--glass-bg-strong) !important;
+}
+
+/* ===== AKSESIBILITAS: kurangi efek saat pengguna meminta ===== */
+@media (prefers-reduced-motion: reduce) {
+  .kartu-template,
+  .dc-item-slide,
+  .dc-item-nomor,
+  .segmen-tampilan button,
+  .segmen-dashboard button,
+  .nitz-app-root button[type="button"] {
+    transition: none;
+  }
+  .kartu-template:hover,
+  .dc-item-slide:hover,
+  .nitz-app-root button[type="button"]:hover:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* ===== KONTRAS: TAMBAHKAN TEKS DI ATAS KACA GELAP =====
+   Sengaja diulang untuk tema terang: `:root[data-theme="light"]` punya
+   spesifisitas lebih tinggi (0,2,0) daripada `:root` (0,1,0), jadi blok
+   di bawah tidak akan pernah berlaku di tema terang tanpa pengulangan ini. */
+@media (prefers-contrast: more) {
+  :root,
+  :root[data-theme="light"] {
+    --glass-bg: color-mix(in srgb, var(--surface) 94%, transparent);
+    --glass-bg-strong: color-mix(in srgb, var(--surface-2) 97%, transparent);
+    --glass-bg-subtle: color-mix(in srgb, var(--surface) 88%, transparent);
+    --glass-border: color-mix(in srgb, white 46%, var(--border));
+  }
+  /* Tombol aktif tetap solid — bukan film — supaya teks gelap terbaca. */
+  .segmen-tampilan button.aktif,
+  .segmen-dashboard button.aktif {
+    background: var(--brand) !important;
+    color: var(--primary-action-text) !important;
+  }
+}
+
+/* ===== FALLBACK: TANPA DUKUNGAN backdrop-filter =====
+   Tanpa blur, panel `--glass-bg` (26–62% transparan) hanya jadi film
+   tipis di atas mesh berwarna → teks bisa jatuh di bawah ambang keterbaca.
+   Di sini panel dibuat hampir pekat: tetap terasa berlapis, tapi teks aman. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --glass-bg: color-mix(in srgb, var(--surface) 94%, transparent);
+    --glass-bg-strong: color-mix(in srgb, var(--surface-2) 97%, transparent);
+    --glass-bg-subtle: color-mix(in srgb, var(--surface) 88%, transparent);
+  }
+  .glass,
+  .glass-strong,
+  .glass-subtle,
+  .kartu-kaca,
+  .dc-kartu,
+  .ag-kartu,
+  .kartu-template,
+  .dash-card,
+  .stat-kotak,
+  .segmen-tampilan,
+  .segmen-dashboard,
+  .nitz-side,
+  .nitz-isi,
+  .editor-canvas,
+  .dc-lembar,
+  [role="dialog"] {
+    background: var(--surface) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  /* Kartu galeri tetap pakai tint-nya, bukan warna solid, supaya Hierarki
+     visual antar panel tetap terbaca. */
+  .kartu-template,
+  .dash-card,
+  .stat-kotak {
+    background: var(--glass-bg) !important;
+  }
+}

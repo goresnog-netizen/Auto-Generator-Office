@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+release/
+
+# Logs
+*.log
+dev*.log
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temp scripts & dumps (local working files)
+scripts/*
+!scripts/build-release.ps1
+!scripts/verify-templates.mjs
+!scripts/diff-presentasi.mjs
+fable/
+Files/
+Menu/
+vendors/
+*.txt
+*.py
+*.ps1
+!scripts/*.ps1
+
+# Env
+.env
+.env.local

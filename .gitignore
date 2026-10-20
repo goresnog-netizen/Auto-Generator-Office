@@ -1,0 +1,74 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+release/
+
+# Logs
+*.log
+dev*.log
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Laporan izin file dari skrip diagnosa ACL DSH (butuh hak admin-ish).
+.acl-reports/
+
+# Screenshot & artefak verifikasi yang dibuat lokal.
+ui-*.png
+kaca-*.png
+noise-*.png
+ui-audit*.png
+
+# Temp scripts & dumps (local working files)
+scripts/*
+!scripts/build-release.ps1
+!scripts/verify-templates.mjs
+!scripts/diff-presentasi.mjs
+!scripts/vendor-deckcraft.ps1
+!scripts/verify-api.mjs
+!scripts/verify-ui.mjs
+!scripts/verify-deckcraft.mts
+!scripts/verifikasi-pptx.mjs
+!scripts/verifikasi-sidebar.mjs
+!scripts/verifikasi-konkurensi.mjs
+!scripts/verifikasi-perintah.mjs
+!scripts/verifikasi-kaca.mjs
+!scripts/verifikasi-css.mjs
+!scripts/verifikasi-auto-generate.mjs
+!scripts/verifikasi-audit-glass.mjs
+!scripts/verifikasi-noise.mjs
+!scripts/verifikasi-semua.ps1
+!scripts/sync-deploy.ps1
+!scripts/capture-tema.mjs
+!scripts/verifikasi-pptx-generator.mjs
+fable/
+Files/
+Menu/
+vendors/
+*.txt
+*.py
+*.ps1
+!scripts/*.ps1
+
+# Binary DeckCraft yang di-vendor (80 MB) — unduh ulang via
+# `pnpm vendor:deckcraft`, jangan pernah di-commit.
+vendors/deckcraft-bin/
+
+# Source DeckCraft (repo pihak ketiga, 11 MB) — salinan kerja lokal untuk
+# membaca dokumentasi & source engine. Ambil sendiri dari
+# https://github.com/storytold/deckcraft bila perlu.
+deckcraft/
+
+# Env
+.env
+.env.local
+
+# Scratch files
+app_copy.tsx
+capture.cjs
+capture2.cjs

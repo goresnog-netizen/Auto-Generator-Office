@@ -1,0 +1,28 @@
+{
+  "id": "contoh_rencana_rapat",
+  "nama": "Contoh Rencana Rapat",
+  "kategori": "dokumen",
+  "format": "word",
+  "deskripsi": "Contoh minimal template impor: undangan dan susunan acara rapat unit (DATA UJI).",
+  "ikon": "📄",
+  "judulDokumen": "Rencana Rapat Unit (DATA UJI)",
+  "blocks": [
+    {
+      "id": "c1",
+      "type": "heading",
+      "level": 1,
+      "text": "Rencana Rapat Unit"
+    },
+    {
+      "id": "c2",
+      "type": "paragraph",
+      "text": "Hari Senin, aula utama. Peserta 10 orang perwakilan unit. Seluruh contoh ini DATA UJI (sintetis)."
+    },
+    {
+      "id": "c3",
+      "type": "list",
+      "ordered": true,
+      "items": [{ "text": "Pembukaan" }, { "text": "Pembahasan rekap" }]
+    }
+  ]
+}

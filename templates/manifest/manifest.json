@@ -1,0 +1,554 @@
+[
+  {
+    "id": "laporan_kegiatan",
+    "nama": "Laporan Kegiatan",
+    "kategori": "dokumen",
+    "format": "word",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "word"
+    ]
+  },
+  {
+    "id": "laporan_pelaksanaan_tugas",
+    "nama": "Laporan Pelaksanaan Tugas",
+    "kategori": "dokumen",
+    "format": "word",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "word"
+    ]
+  },
+  {
+    "id": "laporan_informasi",
+    "nama": "Laporan Informasi",
+    "kategori": "dokumen",
+    "format": "word",
+    "bagianPRD": "7.3A",
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "word"
+    ]
+  },
+  {
+    "id": "laporan_perkembangan_situasi",
+    "nama": "Laporan Perkembangan Situasi",
+    "kategori": "dokumen",
+    "format": "word",
+    "bagianPRD": "7.3B",
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "word"
+    ]
+  },
+  {
+    "id": "analisis_situasi",
+    "nama": "Analisis Situasi",
+    "kategori": "dokumen",
+    "format": "word",
+    "bagianPRD": "7.3C",
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "word"
+    ]
+  },
+  {
+    "id": "perkiraan_ancaman_kerawanan",
+    "nama": "Perkiraan Ancaman Kerawanan",
+    "kategori": "dokumen",
+    "format": "word",
+    "bagianPRD": "7.3D",
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "word"
+    ]
+  },
+  {
+    "id": "ringkasan_eksekutif",
+    "nama": "Ringkasan Eksekutif",
+    "kategori": "dokumen",
+    "format": "word",
+    "bagianPRD": "7.3E",
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "word"
+    ]
+  },
+  {
+    "id": "kronologi_kejadian",
+    "nama": "Kronologi Kejadian",
+    "kategori": "dokumen",
+    "format": "word",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "word"
+    ]
+  },
+  {
+    "id": "laporan_evaluasi",
+    "nama": "Laporan Evaluasi",
+    "kategori": "dokumen",
+    "format": "word",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "word"
+    ]
+  },
+  {
+    "id": "laporan_teknis",
+    "nama": "Laporan Teknis",
+    "kategori": "dokumen",
+    "format": "word",
+    "bagianPRD": "7.2",
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "word"
+    ]
+  },
+  {
+    "id": "proposal_penelitian",
+    "nama": "Proposal Penelitian",
+    "kategori": "dokumen",
+    "format": "word",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "word"
+    ]
+  },
+  {
+    "id": "formal_briefing",
+    "nama": "Briefing Formal",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "executive_briefing",
+    "nama": "Executive Briefing",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "data_analysis",
+    "nama": "Analisis Data",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "situation_brief",
+    "nama": "Briefing Situasi",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "project_status",
+    "nama": "Status Proyek",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "technical_presentation",
+    "nama": "Presentasi Teknis",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "pitch_deck_modern",
+    "nama": "Pitch Deck Modern",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "presentasi_kpi_visual",
+    "nama": "Presentasi KPI Visual",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "sampul_agenda_modern",
+    "nama": "Sampul + Agenda Modern",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "2.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis) + foto Unsplash",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "ringkasan_eksekutif_ppt",
+    "nama": "Ringkasan Eksekutif PPT",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "2.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "dasbor_kpi_presentasi",
+    "nama": "Dasbor KPI Presentasi",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "2.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis) + foto Unsplash",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "peta_jalan_roadmap",
+    "nama": "Peta Jalan Roadmap",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "2.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis) + foto Unsplash",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "pitch_proposal_investor",
+    "nama": "Pitch Proposal Investor",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "2.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis) + foto Unsplash",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "laporan_keuangan_triwulan",
+    "nama": "Laporan Keuangan Triwulan",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "2.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "pelatihan_onboarding_tim",
+    "nama": "Pelatihan Onboarding Tim",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "2.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis) + foto Unsplash",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "evaluasi_program_kerja",
+    "nama": "Evaluasi Program Kerja",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "2.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "sosialisasi_kebijakan_baru",
+    "nama": "Sosialisasi Kebijakan Baru",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "2.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "perbandingan_opsi_keputusan",
+    "nama": "Perbandingan Opsi Keputusan",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "2.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "laporan_insiden_krisis",
+    "nama": "Laporan Insiden Krisis",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "2.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "showcase_produk_umkm",
+    "nama": "Showcase Produk UMKM",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "2.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis) + foto Unsplash",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "penutup_terima_kasih_cta",
+    "nama": "Penutup Terima Kasih CTA",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "2.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis) + foto Unsplash",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "laporan_operasi_militer",
+    "nama": "Laporan Operasi Militer (15 Slide)",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "2.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis) + foto Wikimedia Commons (CC BY-SA 4.0 / PD)",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "laporan_kesiapan_satuan_militer",
+    "nama": "Laporan Kesiapan Satuan (12 Slide)",
+    "kategori": "presentasi",
+    "format": "pptx",
+    "bagianPRD": null,
+    "versi": "2.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis) + foto Wikimedia Commons (CC BY-SA 4.0)",
+    "ekspor": [
+      "pptx"
+    ]
+  },
+  {
+    "id": "event_log",
+    "nama": "Catatan Kejadian",
+    "kategori": "spreadsheet",
+    "format": "xlsx",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "xlsx"
+    ]
+  },
+  {
+    "id": "source_register",
+    "nama": "Register Sumber",
+    "kategori": "spreadsheet",
+    "format": "xlsx",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "xlsx"
+    ]
+  },
+  {
+    "id": "claim_evidence_matrix",
+    "nama": "Matriks Klaim dan Bukti",
+    "kategori": "spreadsheet",
+    "format": "xlsx",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "xlsx"
+    ]
+  },
+  {
+    "id": "risk_matrix",
+    "nama": "Matriks Risiko",
+    "kategori": "spreadsheet",
+    "format": "xlsx",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "xlsx"
+    ]
+  },
+  {
+    "id": "task_tracker",
+    "nama": "Pelacak Tugas",
+    "kategori": "spreadsheet",
+    "format": "xlsx",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "xlsx"
+    ]
+  },
+  {
+    "id": "executive_dashboard",
+    "nama": "Dasbor Eksekutif",
+    "kategori": "spreadsheet",
+    "format": "xlsx",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "xlsx"
+    ]
+  },
+  {
+    "id": "timeline",
+    "nama": "Linimasa",
+    "kategori": "infografis",
+    "format": "diagram",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "diagram"
+    ]
+  },
+  {
+    "id": "risk_matrix_visual",
+    "nama": "Matriks Risiko Visual",
+    "kategori": "infografis",
+    "format": "diagram",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "diagram"
+    ]
+  },
+  {
+    "id": "process_flow",
+    "nama": "Alur Proses",
+    "kategori": "infografis",
+    "format": "diagram",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "diagram"
+    ]
+  },
+  {
+    "id": "comparison",
+    "nama": "Perbandingan",
+    "kategori": "infografis",
+    "format": "diagram",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "diagram"
+    ]
+  },
+  {
+    "id": "statistical_summary",
+    "nama": "Ringkasan Statistik",
+    "kategori": "infografis",
+    "format": "diagram",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "diagram"
+    ]
+  },
+  {
+    "id": "one_page_brief",
+    "nama": "Brief Satu Halaman",
+    "kategori": "infografis",
+    "format": "diagram",
+    "bagianPRD": null,
+    "versi": "1.0",
+    "sumber": "dibuat lokal NitZ-909 (contoh sintetis)",
+    "ekspor": [
+      "diagram"
+    ]
+  }
+]
