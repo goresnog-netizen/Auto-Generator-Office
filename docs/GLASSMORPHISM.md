@@ -19,7 +19,74 @@ Kaca bukan sekadar kotak semi transparan. Efeknya butuh tiga hal sekaligus:
    supaya panel terlihat terangkat dari latar, bukan ditempel.
 
 Ketiganya sudah diimplementasikan di `glass.css` dan diverifikasi secara
-empiris oleh `scripts/verifikasi-kaca.mjs`.
+empiris oleh skrip verifikasi.
+
+---
+
+## Arsitektur backdrop root (bagian terpenting)
+
+MDN mendefinisikan *backdrop root*: elemen yang menjadi batas bagi efek
+`backdrop-filter`. Sebuah elemen menjadi backdrop root bila ia punya:
+
+- `filter` selain `none`
+- `opacity` < 1
+- `mask` / `clip-path` besides `none`
+- `backdrop-filter` besides `none`
+- **`mix-blend-mode` besides `normal`**
+- `will-change` salah satu dari di atas
+
+Konsekuensinya: **blur sebuah panel hanya menjangkau piksel sampai backdrop
+root terdekat.** Kalau mesh gradien dan `mix-blend-mode` berada di leluhur
+yang sama, blur panel anak **tidak akan menjangkau mesh** — hasilnya kabut
+dari warna datar, bukan dari gradient.
+
+Struktur yang benar (dipakai di `glass.css`):
+
+| Lapisan | Elemen | Sifat |
+|---|---|---|
+| Latar mesh | `body` | gradien radial 5 blob, `background-attachment: fixed` |
+| Butiran | `.nitz-latar` | `feTurbulence` + `mix-blend-mode: overlay`, `position: fixed` |
+| Aurora | `.nitz-aurora` | 2 blob bergerak, `filter: blur()`, animasi `transform` |
+| Konten | `.nitz-app-root` | **transparan** — tidak menutupi mesh |
+
+`body` tidak punya `mix-blend-mode`/`filter`, jadi blur panel benar-benar
+menjangkau mesh. Butiran dipisah ke elemen tersendiri (bukan `::before` dari
+root) supaya `mix-blend-mode`-nya tidak menjadikan root sebagai backdrop root.
+
+Diverifikasi oleh `scripts/verifikasi-backdrop.mjs`:
+- 0 elemen leluhur yang memblokir blur,
+- piksel **berbeda** dengan/tanpa `backdrop-filter` (blur benar-benar jalan).
+
+---
+
+## Aurora: sapuan cahaya bergerak
+
+Dua blob besar bergerak perlahan di atas mesh. Gunanya ada dua:
+
+1. Warna jadi "hidup", bukan foto statis.
+2. Panel-panel kaca selalu punya sesuatu yang bergerak untuk diburam.
+
+**Kenapa `transform`, bukan `background-position`?** Animasi `transform`
+dijalankan compositor (GPU); animasi `background-position` memicu repaint
+tiap frame. Untuk "tanpa lag", `transform` adalah pilihan yang benar.
+
+`will-change: transform` hanya dipasang pada 1 elemen, jadi biayanya
+negligible. Aurora dimatikan otomatis saat `prefers-reduced-motion: reduce`.
+
+---
+
+## Sheen tepi
+
+Sapuan cahaya tipis di tepi atas panel — ciri "kaca premium" (Apple
+visionOS, Fluent 2). Diterapkan lewat `background-image` **di atas** warna
+tint (bukan shorthand `background`), agar tint tetap bisa diatur terpisah:
+
+```css
+.kartu-kaca {
+  background-color: var(--glass-bg) !important;
+  background-image: var(--glass-sheen) !important;
+}
+```
 
 ---
 
@@ -36,6 +103,7 @@ ikut otomatis.
 | `--glass-bg-subtle` | surface 26% | white 38% | Panel tipis (segmen, chip) |
 | `--glass-border` | white 22% + border | white 82% + border | Tepi |
 | `--glass-highlight` | inset white 30% | inset white 96% | Sorot tepi atas |
+| `--glass-sheen` | gradien 115° | idem | Sapuan cahaya tepi |
 | `--glass-shadow` | 2 lapis | 2 lapis | Bayangan |
 
 Persentase sengaja rendah (26–62%) agar isi di belakang benar-benar terlihat

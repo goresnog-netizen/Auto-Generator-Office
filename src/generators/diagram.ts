@@ -10,19 +10,18 @@ import {
   GeneratorResult,
   ValidationResult,
   GeneratorOptions,
-  ContentBlock,
   DiagramBlock,
   ChartBlock
 } from '../types';
 
-import { createWriteStream } from 'fs';
 import { promisify } from 'util';
 import { exec } from 'child_process';
 
 const execAsync = promisify(exec);
 
-export interface DiagramGeneratorOptions extends GeneratorOptions {
+export interface DiagramGeneratorOptions extends Omit<GeneratorOptions, 'theme'> {
   format?: 'svg' | 'png' | 'pdf';
+  /** Tema Mermaid (bukan tema dokumen). */
   theme?: 'default' | 'dark' | 'forest' | 'neutral';
   width?: number;
   height?: number;
@@ -30,12 +29,21 @@ export interface DiagramGeneratorOptions extends GeneratorOptions {
 }
 
 export class DiagramGenerator implements DocumentGenerator {
-  constructor(private options: DiagramGeneratorOptions = {}) {}
+  private options: DiagramGeneratorOptions;
+
+  constructor(options: DiagramGeneratorOptions = { outputPath: '' }) {
+    this.options = {
+      format: options.format ?? 'svg',
+      theme: options.theme ?? 'default',
+      ...options,
+    };
+  }
 
   validate(config: DocumentConfig, content: DocumentContent): ValidationResult {
     const errors: string[] = [];
     const warnings: string[] = [];
-
+    // `config` belum dipakai untuk validasi diagram, tapi tetap bagian kontrak.
+    void config;
     const diagramBlocks = content.blocks.filter(b => b.type === 'diagram' || b.type === 'chart');
     if (diagramBlocks.length === 0) {
       warnings.push('No diagram or chart blocks found in content');

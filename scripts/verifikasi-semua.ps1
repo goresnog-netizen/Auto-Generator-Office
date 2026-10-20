@@ -57,6 +57,8 @@ if ($dev) {
   Jalankan "Auto-Generate (UI end-to-end)" "node" @("scripts/verifikasi-auto-generate.mjs")
   Jalankan "Audit Glassmorphism (kontras, dead CSS)" "node" @("scripts/verifikasi-audit-glass.mjs")
   Jalankan "Noise overlay terlihat?" "node" @("scripts/verifikasi-noise.mjs")
+  Jalankan "Arsitektur backdrop root" "node" @("scripts/verifikasi-backdrop.mjs")
+  Jalankan "Performa modern (aurora, biaya blur)" "node" @("scripts/verifikasi-performa.mjs")
 } else {
   Write-Host ""
   Write-Host "Server dev tidak berjalan — lewati pemeriksaan HTTP/UI." -ForegroundColor Yellow

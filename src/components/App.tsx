@@ -26,6 +26,7 @@ import { MiniTemplatePreview } from "./MiniTemplatePreview";
 import { TemplatePreview } from "./TemplatePreview";
 import { DeckCraftStudio } from "./DeckCraftStudio";
 import { AutoGenerate } from "./AutoGenerate";
+import { PerformaBadge } from "./PerformaBadge";
 import { eksporDokumen } from "../lib/exporter";
 import { renderInfografisPng } from "../lib/infografis";
 import {
@@ -609,6 +610,10 @@ function AppInner() {
   const [endpointInput, setEndpointInput] = useState("");
   const [pesanSimpan, setPesanSimpan] = useState("");
   const [statusDraf, setStatusDraf] = useState<StatusTombol>(STATUS_AWAL);
+  /** Auto-Generate: ganti seluruh kanvas, atau tambahkan di akhir. */
+  const [modeAutoGenerate, setModeAutoGenerate] = useState<"ganti" | "tambah">(
+    "ganti",
+  );
   const [statusEkspor, setStatusEkspor] = useState<
     Record<DocumentType, StatusTombol>
   >({
@@ -2017,6 +2022,14 @@ function AppInner() {
     >
       <style>{`@media (max-width: 1100px) { .nitz-body { flex-wrap: wrap; } .nitz-side { width: 100% !important; border: none !important; border-top: 1px solid var(--border) !important; } }`}</style>
 
+      {/* ===== Lapisan butiran (noise) =====
+          Elemen terpisah, bukan `::before` dari root: `mix-blend-mode`
+          membuat elemen itu menjadi backdrop root, yang akan memblokir
+          `backdrop-filter` panel-panel di bawahnya agar tidak menjangkau
+          latar mesh. */}
+      <div className="nitz-latar" aria-hidden="true" />
+      <div className="nitz-aurora" aria-hidden="true" />
+
       {/* ===== Kepala ===== */}
       <header
         className="nitz-header"
@@ -2162,6 +2175,7 @@ function AppInner() {
             >
               Tur
             </Button>
+            <PerformaBadge />
           </div>
         </div>
       </header>
@@ -3197,12 +3211,23 @@ function AppInner() {
               apiKey={kunciInput}
               baseUrl={endpointInput.trim() || undefined}
               judul={judul}
+              mode={modeAutoGenerate}
+              onMode={setModeAutoGenerate}
               onHasil={(hasil) => {
-                ubah(() => editor.setBlocks(hasil.blocks));
-                setJudul(hasil.judul);
+                if (modeAutoGenerate === "tambah") {
+                  // Tambahkan di akhir isi yang ada; judul tidak diubah.
+                  ubah(() =>
+                    editor.setBlocks([...editor.getBlocks(), ...hasil.blocks]),
+                  );
+                } else {
+                  ubah(() => editor.setBlocks(hasil.blocks));
+                  setJudul(hasil.judul);
+                }
                 setStatusDraf({
                   state: "sukses",
-                  pesan: `Auto-generate: ${hasil.statistik.totalBlok} blok dibuat dari prompt.`,
+                  pesan:
+                    `Auto-generate: ${hasil.statistik.totalBlok} blok ` +
+                    `${modeAutoGenerate === "tambah" ? "ditambahkan" : "dibuat"} dari prompt.`,
                 });
               }}
             />

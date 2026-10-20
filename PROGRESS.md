@@ -101,22 +101,76 @@ Terakhir diperbarui: 2026-10-20
 - 66 unit test lulus
 - build produksi: sukses
 
-## Yang belum dikerjakan
+## Sesi 2 (2026-10-20 sore/malam) — lanjutan sampai tuntas
 
-- Tidak ada perubahan pada `src/generators/` (sudah di-quarantine, bukan
-  jalur live). `PPTXGenerator.generate` masih stub — jalur itu tidak dipakai
-  UI browser.
-- `src/lib/exporter.ts` (pptxgenjs) dibiarkan utuh sebagai jalur ekspor cepat
-  di browser. DeckCraft adalah jalur premium, bukan penggantinya.
+### 1. Git
+- `git init` + commit pertama: 145 file, `4a32d6d`. Ada titik balik.
+- `.gitignore` dirapikan: `.acl-reports/`, screenshot, file scratch.
+
+### 2. Arsitektur backdrop root (temuan dari MDN)
+MDN: elemen dengan `mix-blend-mode` (dan `filter`/`opacity<1`/`mask`/`will-change`)
+menjadi **backdrop root** — `backdrop-filter` hanya menjangkau piksel sampai
+batas terdekat. Mesh lama diletakkan di `.nitz-app-root` yang punya
+`mix-blend-mode` → blur panel **tidak menjangkau mesh**.
+
+Diperbaiki:
+- Mesh gradien dipindah ke `body`.
+- `.nitz-app-root` jadi transparan.
+- Noise jadi elemen terpisah `.nitz-latar` (bukan `::before`).
+- Aurora jadi elemen terpisah `.nitz-aurora`.
+- `base.css` yang masih set background root di-override eksplisit.
+
+Diverifikasi `scripts/verifikasi-backdrop.mjs`: 0 blocker, piksel berbeda
+dengan/tanpa blur.
+
+### 3. Glassmorphism modern
+- **Aurora**: 2 blob bergerak, animasi `transform` (GPU, bukan repaint) 24 s.
+- **Sheen tepi**: sapuan cahaya 115° di tepi atas panel.
+- **PerformaBadge**: chip FPS real-time di header + penanda "gerak ↓" saat
+  `prefers-reduced-motion` aktif.
+
+Terukur `scripts/verifikasi-performa.mjs`:
+- 47 elemen `backdrop-filter` (2,1%) — sebelumnya 215 (9,4%).
+- `will-change` hanya 1 elemen.
+- **Biaya blur: 6,4 ms** (target ≤10 ms).
+- Aurora terbukti hidup (transform berubah, `matrix(...)`).
+
+### 4. PPTXGenerator Node — dari stub jadi nyata
+- `src/generators/pptx.ts` menulis berkas .pptx sungguhan (sebelumnya
+  mengembalikan `outputPath` fiktif tanpa menulis apa pun).
+- Semua 9 jenis blok handled: heading→judul slide, list→bullet bertingkat,
+  table→tabel native, chart→grafik native (tipe huruf kecil!), image→gambar
+  tertanam, diagram→sumber, code→blok kode, divider→garis.
+- Sampul + slide per heading + penutup; bullet >6 dilaporkan di metadata.
+- `tsconfig.node.json` baru → typecheck terpisah untuk kode Node.
+- `DocumentGenerator`/`ValidationResult` dipindah ke `src/types/index.ts`
+  (menghindari siklus import `index.ts` ↔ `generators/`).
+
+Diverifikasi `scripts/verifikasi-pptx-generator.mjs`: 19 pemeriksaan lulus —
+8 slide, 133.553 byte, tabel native, grafik **2 seri** (`<c:ser>`), gambar
+tertanam.
+
+### 5. Auto-Generate mode append
+- Toggle "Ganti kanvas / Tambahkan" di panel Auto-Generate.
+- Mode "Tambahkan" menyambung hasil di akhir isi yang ada; judul tak diubah.
+
+### 6. Typecheck
+- `src/generators/`: 127 → 116 error (diagram.ts & pptx.ts sudah bersih;
+  word/pdf/xlsx dikerjakan terpisah).
+
+## Yang belum selesai
+- `src/generators/word.ts`, `pdf.ts`, `xlsx.ts` masih punya error tipe
+  (API `docx` v9 & `exceljs` berbeda dari asumsi kode lama).
+- Auto-Generate belum punya tombol undo tersendiri.
 - Belum ada CI workflow untuk menjalankan `verify:all` di GitHub Actions.
-- Auto-Generate **mengganti** isi kanvas, belum ada mode "tambahkan".
-- Plugin DSH red-team belum diuji dengan workspace yang benar-benar punya
-  perubahan git (NitZ-909 belum git repo) — `git status` kosong.
 
-## Langkah berikutnya (kandidat)
-
-1. `git init` untuk NitZ-909 + commit, supaya red-team punya diff nyata.
-2. Workflow GitHub Actions yang menjalankan `verify:all`.
+## Catatan metodologi
+Pengukuran performa di headless Chrome tanpa GPU tidak bisa menghitung FPS
+(rAF idle, screencast kosong). Yang bisa diukur: biaya blur lewat selisih
+dua kondisi pada proses yang sama, dengan mengambil nilai terbaik dari 3
+percobaan (noise hanya bisa menambah, bukan mengurangi). Angka "reaktif"
+~150 ms adalah artefak penyimpanan ulang aturan CSS, bukan biaya yang
+dirasakan pengguna.
 3. Auto-Generate mode "tambahkan" (append) dan undo.
 4. Ekspor PDF/GIF lewat DeckCraft (`file.export` mendukung keduanya).
 5. Dukungan font monospace untuk blok kode.

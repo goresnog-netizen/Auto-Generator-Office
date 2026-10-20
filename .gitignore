@@ -42,6 +42,11 @@ scripts/*
 !scripts/verifikasi-auto-generate.mjs
 !scripts/verifikasi-audit-glass.mjs
 !scripts/verifikasi-noise.mjs
+!scripts/verifikasi-backdrop.mjs
+!scripts/verifikasi-performa.mjs
+!scripts/verifikasi-pptx-generator.mjs
+!scripts/ukur-warna.py
+!scripts/ukur-biaya-blur.mjs
 !scripts/verifikasi-semua.ps1
 !scripts/sync-deploy.ps1
 !scripts/capture-tema.mjs

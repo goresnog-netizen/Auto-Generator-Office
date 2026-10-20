@@ -1,0 +1,31 @@
+{
+  // Typecheck untuk kode Node (generator & server).
+  // Dipisah dari tsconfig.json karena bundel browser tidak boleh menarik
+  // tipe Node (fs, child_process, Buffer).
+  //
+  //   npx tsc --noEmit -p tsconfig.node.json
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "types": ["node"]
+  },
+  "include": [
+    "server",
+    "src/generators",
+    "src/index.ts",
+    "src/lib/deckcraft.ts",
+    "src/lib/deckcraft-ppt.ts",
+    "src/types"
+  ]
+}

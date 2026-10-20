@@ -14,7 +14,7 @@
 
 /* ===== TOKEN KACA ===== */
 :root {
-  /* Ketebalanlapisan kaca */
+  /* Ketebalan lapisan kaca */
   --glass-blur: 18px;
   --glass-saturate: 140%;
 
@@ -31,6 +31,17 @@
   --glass-highlight: inset 0 1px 0 color-mix(in srgb, white 30%, transparent);
   --glass-edge: inset 0 0 0 1px color-mix(in srgb, white 10%, transparent);
 
+  /* Cahaya tepi: sapuan warna brand di sisi atas panel — ciri "kaca
+     premium" yangmodern (Apple visionOS / Fluent 2). */
+  --glass-sheen: linear-gradient(
+    115deg,
+    color-mix(in srgb, var(--brand) 0%, transparent) 0%,
+    color-mix(in srgb, var(--brand) 26%, transparent) 22%,
+    color-mix(in srgb, white 0%, transparent) 46%,
+    color-mix(in srgb, var(--brand-2) 18%, transparent) 78%,
+    color-mix(in srgb, var(--brand) 0%, transparent) 100%
+  );
+
   /* Bayangan: dua lapis (ambien + kunci) supaya panel tampak terangkat */
   --glass-shadow:
     0 1px 2px color-mix(in srgb, var(--shadow) 26%, transparent),
@@ -42,6 +53,9 @@
   /* Sudut membulat lebih besar: kacamodern jarang bersudut tajam */
   --glass-radius: 16px;
   --glass-radius-sm: 12px;
+
+  /* Durasi animasi aurora (detik). Lambat supaya tidak mengganggu. */
+  --aurora-period: 24s;
 }
 
 :root[data-theme="light"] {
@@ -62,10 +76,17 @@
 /* ===== LATAR: GRADIENT MESH YANG MEMBERI MAKANAN UNTUK KACA =====
    Tanpa warna-warna bergerak di belakang, blur() tidak punya efek apa pun.
    Mesh ini memakai blob brand + aksen; `--brand` ikut berubah saat varian
-   warna diganti, jadi seluruh aplikasi berubah warna bersama-sama. */
-.nitz-app-root {
+   warna diganti, jadi seluruh aplikasi berubah warna bersama-sama.
+
+   PENTING (backdrop root): `backdrop-filter` hanya memburam sampai
+   "backdrop root" terdekat — elemen yang punya `filter`, `opacity<1`,
+   `mask`, `mix-blend-mode`, atau `backdrop-filter` sendiri. Kalau mesh
+   diletakkan di `.nitz-app-root` DAN ada `mix-blend-mode` di dalamnya,
+   root itu jadi backdrop root dan blur panel anak tidak menjangkau mesh.
+   Karena itu mesh dipindah ke `body` (latar dokumen), sementara
+   `.nitz-app-root` jadi lapisan transparan tempat konten duduk. */
+body {
   position: relative;
-  isolation: isolate;
   background-color: var(--bg);
   background-image:
     radial-gradient(
@@ -103,7 +124,90 @@
   background-repeat: no-repeat;
 }
 
+/* Root aplikasi: transparan, jadi mesh `body` tetap terlihat & bisa
+   diburam oleh panel-panel kaca.
+   Override eksplisit untuk `base.css` (yang masih memberi background pada
+   `.nitz-app-root`, termasuk varian light-nya) — specificity-nya lebih
+   tinggi, jadi harus ditimpa di sini, bukan cuma dengan urutan muat. */
+.nitz-app-root,
 :root[data-theme="light"] .nitz-app-root {
+  background: transparent !important;
+  background-image: none !important;
+  background-attachment: scroll !important;
+}
+
+/* Butiran halus (noise) sebagai elemen terpisah — BUKAN `::before` dari
+   root, karena `mix-blend-mode` di root akan menjadikannya backdrop root
+   dan memblokir blur panel. Di sini ia elemen biasa di atas mesh. */
+.nitz-latar {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.45;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
+}
+:root[data-theme="light"] .nitz-latar {
+  opacity: 0.25;
+}
+
+/* ===== AURORA: SAPUAN CAHAYA BERGERAK =====
+   Dua blob besar bergerak perlahan di atas mesh. Efeknya: warna "hidup",
+   dan blur panel selalu punya sesuatu yang bergerak untuk diburam — itu yang
+   membuat kaca terasa hidup, bukan foto statis.
+
+   Kenapa `transform` dan bukan `background-position`? Animasi transform
+   berjalan di compositor (GPU), sedangkan animasi background-position
+   memicu repaint tiap frame. Untuk "tanpa lag", transform adalah pilihan
+   yang benar.
+
+   `will-change: transform` hanya untuk 1 elemen, jadi biayanya negligible.
+   Elemen ini TIDAK memakai `mix-blend-mode` — blend mode akan menjadikannya
+   backdrop root dan memblokir blur panel (lihat catatan di atas). */
+.nitz-aurora {
+  position: fixed;
+  inset: -25%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  filter: blur(70px);
+  will-change: transform;
+  background:
+    radial-gradient(
+      42% 38% at 28% 32%,
+      color-mix(in srgb, var(--brand) 40%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      38% 34% at 74% 66%,
+      color-mix(in srgb, var(--brand-2) 34%, transparent),
+      transparent 70%
+    );
+  animation: aurora-geser var(--aurora-period) ease-in-out infinite alternate;
+}
+:root[data-theme="light"] .nitz-aurora {
+  opacity: 0.38;
+}
+@keyframes aurora-geser {
+  0% {
+    transform: translate3d(-3%, -2%, 0) rotate(0deg) scale(1);
+  }
+  50% {
+    transform: translate3d(4%, 3%, 0) rotate(6deg) scale(1.08);
+  }
+  100% {
+    transform: translate3d(-2%, 4%, 0) rotate(-4deg) scale(1.02);
+  }
+}
+/* Aurora berhenti saat pengguna meminta gerak minimal. */
+@media (prefers-reduced-motion: reduce) {
+  .nitz-aurora {
+    animation: none;
+  }
+}
+
+:root[data-theme="light"] body {
   background-image:
     radial-gradient(
       1000px 600px at 85% -10%,
@@ -138,21 +242,8 @@
     );
 }
 
-/* Butiran halus di atas gradien:noise halus ini yang membuat kaca terasa
-   seperti bahan nyata, bukan sekadar kotak buram. */
-.nitz-app-root::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0.5;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
-  mix-blend-mode: overlay;
-}
-:root[data-theme="light"] .nitz-app-root::before {
-  opacity: 0.28;
-}
+/* Butiran halus dipindah ke elemen `.nitz-latar` (lihat catatan backdrop root
+   di atas) — bukan lagi `::before` dari root. */
 
 /* ===== PERMUKAAN KACA DASAR =====
    Aturan yang bisa dipakai ulang: `glass` (kaca), `glass-strong` (kaca pekat),
@@ -188,10 +279,11 @@
 .nitz-header {
   background-color: transparent;
   background-image: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--surface) 78%, transparent),
-    color-mix(in srgb, var(--surface) 58%, transparent)
-  );
+      180deg,
+      color-mix(in srgb, var(--surface) 78%, transparent),
+      color-mix(in srgb, var(--surface) 58%, transparent)
+    ),
+    var(--glass-sheen);
   -webkit-backdrop-filter: blur(20px) saturate(150%);
   backdrop-filter: blur(20px) saturate(150%);
   border-bottom: 1px solid var(--glass-border);
@@ -206,10 +298,11 @@
 .nitz-side {
   background-color: transparent;
   background-image: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--surface) 52%, transparent),
-    color-mix(in srgb, var(--surface) 34%, transparent)
-  );
+      180deg,
+      color-mix(in srgb, var(--surface) 52%, transparent),
+      color-mix(in srgb, var(--surface) 34%, transparent)
+    ),
+    var(--glass-sheen);
   -webkit-backdrop-filter: blur(16px) saturate(135%);
   backdrop-filter: blur(16px) saturate(135%);
   border-color: var(--glass-border);
@@ -219,10 +312,15 @@
 /* ===== KARTU: KACA LEMBUT =====
    `Card` memakai inline style, jadi gaya kaca masuk lewat selector yang
    menimpa background/border/radius inline lewat `!important` pada
-   properti yang tidak bisa di-atur inline tanpa!important. */
+   properti yang tidak bisa di-atur inline tanpa!important.
+
+   Sheen: sapuan cahaya tipis di tepi atas, ditambahkan lewat
+   `background-image` di atas warna tint (bukan shorthand `background`,
+   agar tint tetap bisa diatur terpisah). */
 .kartu-kaca,
 .dc-kartu {
-  background: var(--glass-bg) !important;
+  background-color: var(--glass-bg) !important;
+  background-image: var(--glass-sheen) !important;
   border: 1px solid var(--glass-border) !important;
   border-radius: var(--glass-radius) !important;
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
@@ -623,6 +721,36 @@
   color: var(--muted);
   font-size: var(--font-size-caption);
 }
+/* Segmented control mode placement (ganti / tambah). */
+.ag-segmen {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-round);
+  background: var(--glass-bg-subtle);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-highlight);
+}
+.ag-segmen button {
+  flex: 1;
+  padding: 4px 12px;
+  border: none;
+  border-radius: var(--radius-round);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--font-size-caption);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.ag-segmen button:hover {
+  color: var(--text);
+}
+.ag-segmen button.aktif {
+  background: var(--brand);
+  color: var(--primary-action-text);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--shadow) 24%, transparent);
+}
 .ag-pesan {
   margin: 0;
   font-size: var(--font-size-caption);
@@ -638,6 +766,53 @@
 /* Kartu auto-generate: kaca sedikit lebih pekat supaya textarea jelas. */
 .ag-kartu {
   background: var(--glass-bg-strong) !important;
+}
+
+/* ===== INDIKATOR PERFORMA ===== */
+.performa-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-round);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg-subtle);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  font-size: var(--font-size-caption);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  box-shadow: var(--glass-highlight);
+}
+.performa-titik {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  /* denyut halus — menandakan app masih hidup */
+  animation: performa-denyut 2.4s ease-in-out infinite;
+}
+@keyframes performa-denyut {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+.performa-satuan {
+  color: var(--faint);
+  font-size: 10px;
+}
+.performa-nbadge {
+  color: var(--faint);
+}
+@media (prefers-reduced-motion: reduce) {
+  .performa-titik {
+    animation: none;
+  }
 }
 
 /* ===== AKSESIBILITAS: kurangi efek saat pengguna meminta ===== */

@@ -4,21 +4,10 @@
  */
 
 import { DocumentConfig, DocumentContent, ThemeTokens, GeneratorResult } from './types';
+import type { DocumentGenerator, ValidationResult } from './types';
 
-// Re-export types
+// Re-export types (termasuk DocumentGenerator & ValidationResult).
 export * from './types';
-
-// Core generator interface
-export interface DocumentGenerator {
-  generate(config: DocumentConfig, content: DocumentContent): Promise<GeneratorResult>;
-  validate(config: DocumentConfig, content: DocumentContent): ValidationResult;
-}
-
-export interface ValidationResult {
-  valid: boolean;
-  errors: string[];
-  warnings: string[];
-}
 
 // Theme manager
 export class ThemeManager {

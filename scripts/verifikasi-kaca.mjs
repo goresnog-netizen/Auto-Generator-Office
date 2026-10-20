@@ -79,9 +79,12 @@ const cek = (l, ok, d = "") => {
 // 1. Noise overlay: apakah ::before punya background-image dan benar-benar di-render?
 const noise = await evalJs(`
   (() => {
-    const root = document.querySelector('.nitz-app-root');
-    if (!root) return null;
-    const cs = getComputedStyle(root, '::before');
+    // Noise kini elemen TERPISAH (.nitz-latar), bukan pseudo-element dari
+    // root — supaya mix-blend-mode-nya tidak menjadikan root sebagai
+    // backdrop root yang memblokir blur panel.
+    const latar = document.querySelector('.nitz-latar');
+    if (!latar) return null;
+    const cs = getComputedStyle(latar);
     return {
       content: cs.content,
       hasImage: cs.backgroundImage.includes('data:image/svg+xml'),
@@ -100,11 +103,9 @@ cek("noise overlay blend mode = overlay", noise?.mixBlend === "overlay", noise?.
 //    dengan mematikan noise sementara.
 const piksel = await evalJs(`
   (() => {
-    const root = document.querySelector('.nitz-app-root');
-    if (!root) return null;
     const s = document.createElement('style');
     s.id = 'matikan-noise';
-    s.textContent = '.nitz-app-root::before { display: none !important; }';
+    s.textContent = '.nitz-latar { display: none !important; }';
     document.head.appendChild(s);
     return true;
   })()
