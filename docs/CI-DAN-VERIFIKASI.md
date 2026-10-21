@@ -35,6 +35,8 @@ Menjalankan skrip yang menulis berkas sungguhan dan memeriksa isinya:
 - `scripts/audit-isi-generator.mjs` — isi dokumen dibaca & dicek kata kuncinya.
 - `scripts/verifikasi-pdf-gambar.mjs` — gambar benar-benar tertanam di PDF.
 - `scripts/verifikasi-fitur-baru.mjs` — struktur fitur (statis, tanpa browser).
+- `scripts/verifikasi-fitur-deckcraft.mjs` — font kode, filmstrip, ekspor
+  format, dan mirror Vercel (termasuk cek BOM).
 - `scripts/audit-negative-test.mjs` — **negative test** (lihat bawah).
 
 Job ini tak butuh binary DeckCraft, jadi aman di runner Linux.
@@ -48,6 +50,9 @@ Membandingkan id perintah yang dikirim ke engine dengan engine aslinya:
 2. `node scripts/verifikasi-perintah.mjs` — cek id & parameter perintah.
 3. `node --experimental-strip-types scripts/verify-deckcraft.mts` — uji
    end-to-end: content model → perintah → deck → PPTX → PNG per slide.
+4. `node --experimental-strip-types scripts/verifikasi-kode-deckcraft.mts` —
+   blok kode benar-benar ber-font monospace, dan paragraf biasa TIDAK ikut
+   kena.
 
 `continue-on-error: true` karena job ini bergantung pada ketersediaan
 rilis binary di jaringan; kegagalan di sini tak harus memblokir PR.
@@ -67,10 +72,14 @@ berkas ke keadaan semula.
 | B | XLSX: nilai sel jadi objek `{text, font}` | exceljs menulis JSON mentah; isi hilang | ✅ 1 pemeriksaan GAGAL |
 | C | DOCX: entri numbering "tanpa urutan" tak terdaftar | docx menulis `numId="{list-tanpa-urutan-0}"`; .docx rusak | ✅ 1 pemeriksaan GAGAL |
 | D | PDF: `muatGambar` selalu mengembalikan `null` | gambar tak pernah tertanam | ✅ 3 pemeriksaan GAGAL |
+| G | Mirror Vercel: `vite.config.ts` meng-import `server/deckcraft-api.ts` statis | build Vercel gagal ("cannot find module") | ✅ 1 pemeriksaan GAGAL |
+| H | Konverter: blok kode tak mengirim `format.font` | kode dirender dengan font body, bukan monospace | ✅ 1 pemeriksaan GAGAL |
+| I | Mirror Vercel: `package.json` diawali BOM | PostCSS/Vite gagal parse JSON → build pecah | ✅ 1 pemeriksaan GAGAL |
 | E | Setelah semua bug dikembalikan, skrip harus lulus lagi | sanity check | ✅ exit 0 |
 | F | Idem, untuk skrip gambar PDF | sanity check | ✅ exit 0 |
+| J | Idem, untuk skrip fitur DeckCraft | sanity check | ✅ exit 0 |
 
-Bug A–C berasal dari sesi sebelumnya; bug D ditemukan di sesi ini.
+Bug A–C berasal dari sesi sebelumnya; D dari sesi 3; G–I dari sesi 4.
 
 Detail penting: skrip retry **satu kali** kalau gagal, TETAPI hanya kalau
 output-nya tak mengandung `[GAGAL]`. Render Mermaid butuh Chrome dan bisa
@@ -102,6 +111,10 @@ dibuat selalu mencetak `[GAGAL]`, jadi tak pernah ter-retry.
 | `verifikasi-pptx.mjs` | isi PPTX hasil DeckCraft: slide, tabel, grafik, SmartArt |
 | `verifikasi-pdf-gambar.mjs` | gambar tertanam di PDF (XObject `/Subtype /Image`) |
 | `verifikasi-fitur-baru.mjs` | struktur fitur baru (statis) |
+| `verifikasi-fitur-deckcraft.mjs` | font kode, filmstrip, ekspor format, mirror Vercel |
+| `verifikasi-kode-deckcraft.mts` | blok kode ber-font monospace (binary DeckCraft asli) |
+| `verifikasi-api-filmstrip.mjs` | filmstrip + ekspor PDF/GIF lewat HTTP |
+| `verifikasi-ui-filmstrip.mjs` | filmstrip di browser (thumbnail ter-render) |
 | `verifikasi-kaca.mjs` | efek kaca terlihat + kontras WCAG |
 | `verifikasi-audit-glass.mjs` | kontras, dead CSS, fallback tanpa blur |
 | `verifikasi-css.mjs` | selector mati + painting order + fallback |
@@ -116,7 +129,7 @@ Suite gabungan: `pnpm verify:all` (= `scripts/verifikasi-semua.ps1`).
 
 ---
 
-## Dua jebakan teknis yang sudah ditangani
+## Tiga jebakan teknis yang sudah ditangani
 
 ### 1. Encoding `.ps1` di Windows PowerShell 5
 
@@ -139,6 +152,45 @@ ekstraktor ZIP Node murni (central directory + inflateRaw) — menggantikan
 `Expand-Archive` di semua skrip. Sekaligus tidak bergantung pada
 `powershell.exe` tersedia di PATH.
 
+### 3. BOM di JSON yang ditulis PowerShell 5
+
+`Set-Content -Encoding UTF8` di Windows PowerShell 5 menulis **BOM**. Kalau
+berkas JSON itu dibaca Vite/PostCSS, hasilnya:
+
+```
+[Failed to load PostCSS config: SyntaxError: Unexpected token '\uFEFF']
+```
+
+Perbaikannya: `[System.IO.File]::WriteAllText($path, $json, (New-Object
+System.Text.UTF8Encoding($false)))`. `scripts/verifikasi-fitur-deckcraft.mjs`
+memeriksa 3 byte pertama `package.json` mirror sebagai penjaga.
+
+---
+
+## Catatan untuk skrip berbasis browser
+
+Skrip UI berbasis Chrome DevTools Protocol **harus menunggu elemen muncul**,
+bukan memakai jeda tetap. Versi pertama `verifikasi-ui-filmstrip.mjs`
+memakai `sleep(6000)` dan gagal **semua** pemeriksaan padahal tampilannya
+benar — panel React belum selesai mount.
+
+Polanya sekarang:
+
+```js
+async function tungguPunsur(kueri, maksMs = 30000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < maksMs) {
+    if (await evalJs(`!!document.querySelector(${JSON.stringify(kueri)})`)) return true;
+    await sleep(500);
+  }
+  return false;
+}
+```
+
+Untuk thumbnail filmstrip, jeda tetap tak cukup: elemennya ada sebelum
+gambarnya selesai di-decode. Yang diuji adalah `naturalWidth > 0`, bukan
+keberadaan elemen.
+
 ---
 
 ## Menjalankan sendiri
@@ -149,6 +201,9 @@ pnpm verify:generators   # generator saja
 pnpm audit:negative      # negative test saja
 pnpm verify:pdf-image    # gambar PDF saja
 pnpm verify:fitur-baru   # pemeriksaan statis fitur baru
+pnpm verify:fitur-deckcraft   # font kode, filmstrip, ekspor, mirror Vercel
+pnpm verify:deckcraft:kode     # blok kode monospace (butuh binary DeckCraft)
+pnpm verify:deckcraft:filmstrip # filmstrip + PDF/GIF lewat HTTP
 ```
 
 Untuk pemeriksaan berbasis browser, jalankan dulu server dev:

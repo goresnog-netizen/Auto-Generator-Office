@@ -29,6 +29,8 @@ bd-tanpa-blur.png
 suite-out.txt
 suite-run*.txt
 probe-*.mjs
+.devserver.log
+.devserver.err
 
 # Temp scripts & dumps (local working files)
 scripts/*
@@ -54,6 +56,12 @@ scripts/*
 !scripts/verifikasi-generators.mjs
 !scripts/verifikasi-pdf-gambar.mjs
 !scripts/verifikasi-fitur-baru.mjs
+!scripts/verifikasi-fitur-deckcraft.mjs
+!scripts/verifikasi-kode-deckcraft.mts
+!scripts/verifikasi-api-filmstrip.mjs
+!scripts/verifikasi-ui-filmstrip.mjs
+!scripts/zip-util.mjs
+!scripts/perbaiki-encoding.ps1
 !scripts/audit-isi-generator.mjs
 !scripts/audit-negative-test.mjs
 !scripts/ukur-warna.py

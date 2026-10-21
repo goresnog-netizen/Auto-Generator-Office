@@ -79,6 +79,9 @@ jobs:
       - name: Verifikasi fitur baru (CI, undo, pesan, diagram)
         run: node scripts/verifikasi-fitur-baru.mjs
 
+      - name: Verifikasi fitur DeckCraft (font kode, filmstrip, ekspor)
+        run: node scripts/verifikasi-fitur-deckcraft.mjs
+
       - name: Negative test (skrip menangkap regresi)
         run: node scripts/audit-negative-test.mjs
 
@@ -113,3 +116,6 @@ jobs:
 
       - name: Uji end-to-end bridge DeckCraft
         run: node --experimental-strip-types scripts/verify-deckcraft.mts
+
+      - name: Uji blok kode ber-font monospace
+        run: node --experimental-strip-types scripts/verifikasi-kode-deckcraft.mts

@@ -196,14 +196,124 @@ Hasil per generator:
 - ~~Auto-Generate belum punya tombol undo tersendiri.~~ -> **SELESAI** (Sesi 3).
 - ~~Belum ada CI workflow untuk menjalankan `verify:all` di GitHub Actions.~~ ->
   **SELESAI** (Sesi 3).
+- ~~Dukungan font monospace untuk blok kode lewat DeckCraft API.~~ ->
+  **SELESAI** (Sesi 4).
+- ~~Render pratinjau semua slide (filmstrip) di DeckCraft Studio.~~ ->
+  **SELESAI** (Sesi 4).
+- ~~Ekspor PDF/GIF lewat DeckCraft (`file.export` mendukung keduanya).~~ ->
+  **SELESAI** (Sesi 4).
 - Vercel tak bisa menjalankan API DeckCraft (panel menampilkan "Tidak
   tersedia" + panduan `pnpm serve`/host ber-Node). Ini batasan platform,
   bukan bug - DeckCraft adalah program native Rust.
 - Diagram butuh mermaid-cli + Chrome; tanpa itu jatuh ke fallback `.mmd`
   (sekarang pesannya menyebut butir yang kurang secara spesifik).
-- Dukungan font monospace untuk blok kode lewat DeckCraft API.
-- Render pratinjau semua slide (filmstrip) di DeckCraft Studio.
-- Ekspor PDF/GIF lewat DeckCraft (`file.export` mendukung keduanya).
+- DeckCraft Studio belum ada di mirror `Deploy Github/` (memang disengaja -
+  butuh server Node), tapi panelnya sendiri sudah di-source utama.
+
+## Sesi 4 (2026-10-21) - 4 item tersisa diselesaikan + 3 bug nyata
+
+### 1. Font monospace untuk blok kode
+- `src/lib/deckcraft-ppt.ts`: blok `code` kini jadi text box ber-font
+  monospace (16 pt) + latar + garis, bukan teks biasa.
+- **Temuan kunci (empiris, DeckCraft v0.8.0 MCP)**:
+  - `format.font {family, ids:[N]}` **mengabaikan `ids`** - hasilnya null,
+    shape tak berubah;
+  - `format.*` berlaku pada **selection slide AKTIF**, bukan pada id;
+  - `shape.insert`/`insert.textBox` **otomatis menyeleksi** shape barunya,
+    jadi `insert.textBox` -> `format.font` berurutan dalam satu batch
+    benar-benar menempel;
+  - `slide.go {index}` **menghapus selection** - jadi harus di SEBELUM
+    `insert.textBox`, bukan sesudahnya;
+  - `shape.inspect` hanya mencari shape di **slide aktif** - perlu `slide.go`
+    dulu (ini sempat membuat font terbaca `undefined` saat inspeksi).
+- Konsekuensi desain: perintah DeckCraft kini membawa field `slide` (indeks
+  slide). Bridge menyisipkan `slide.go` yang sesuai sebelum perintah
+  per-slide. Konverter sendiri TIDAK membuat `slide.go`.
+- **Catatan lisensi font**: DeckCraft melarang aset Microsoft (§1.1 AGENTS.md
+  DeckCraft). "Consolas" aman karena engine memetakannya ke substitusi
+  berbobot metrik yang bebas lisensi: Liberation Mono -> Courier New ->
+  Menlo -> Courier (`crates/fonts/src/fontdb.rs`). Font yang benar-benar
+  dirender sudah diverifikasi lewat hash PNG berbeda per nama font.
+
+### 2. Ekspor PDF & GIF lewat DeckCraft
+- `src/lib/deckcraft.ts`: metode `ekspor(path, format, opsi)` memakai tool
+  MCP `export` (format: png, jpeg, pptx, deckcraft, outline, pdf, gif).
+- `server/deckcraft-api.ts`: rute `POST /api/deckcraft/export-format`
+  (build + ekspor dalam satu operasi serial). Format tak didukung -> 400
+  dengan pesan yang menyebut pilihan yang valid.
+- `src/components/DeckCraftStudio.tsx`: tombol "Unduh PDF" & "Unduh GIF".
+- Terverifikasi: PDF 182.885 B (signature `%PDF-`), GIF 28.035 B
+  (signature `GIF89a`), nama berkas di `Content-Disposition`.
+
+### 3. Filmstrip pratinjau semua slide
+- `src/lib/deckcraft.ts`: `renderSemua(jumlah, skala)` render tiap slide.
+- `server/deckcraft-api.ts`: `GET /api/deckcraft/filmstrip` -> array PNG
+  base64 (skala 0,35 -> 336x189). Dibatasi 40 slide supaya respons tak
+  membanjiri browser.
+- `src/components/DeckCraftStudio.tsx`: toggle "Filmstrip semua slide" +
+  grid thumbnail. Tanpa `backdrop-filter` (thumbnail kecil, blur tak pernah
+  terlihat tapi tetap menambah layer kompositing).
+- Filmstrip sengaja TIDAK di-refresh tiap slide berganti: render ulang
+  semua slide tiap klik mahal, dan isinya sama selama deck tak berubah.
+
+### 4. Build mirror Vercel - 3 bug nyata ditemukan
+
+**Bug 1 (paling serius): import statis `server/deckcraft-api.ts`.**
+`Deploy Github/vite.config.ts` meng-import modul API DeckCraft secara
+statis, padahal folder `server/` TIDAK ikut disalin ke mirror (Vercel
+melayani aplikasi statis). Build Vercel pasti gagal: "cannot find module".
+- Perbaikan: impor DINAMIS + `try/catch`. Kalau modul tak ada, middleware
+  dilewati; aplikasi tetap dibangun. Rute `/api/deckcraft/*` jatuh ke
+  rewrite SPA -> HTML, dan klien sudah mendeteksi itu ("Server ini tidak
+  menyediakan API DeckCraft").
+- Diverifikasi lewat negative test: mengembalikan import statis -> build
+  mirror GAGAL; dengan fix -> build LULUS.
+
+**Bug 2: BOM di `package.json` mirror.**
+`Set-Content -Encoding UTF8` di Windows PowerShell 5 menulis BOM, dan
+PostCSS/Vite gagal parse JSON yang diawali BOM ("Unexpected token '\uFEFF'")
+-> build mirror pecah.
+- Perbaikan: `[System.IO.File]::WriteAllText` + `UTF8Encoding($false)`.
+
+**Bug 3: skrip npm mirror menunjuk berkas yang tak ada.**
+`package.json` mirror menyalin skrip `serve`, `verify:all`,
+`vendor:deckcraft` dll, padahal folder `scripts/` & `server/` tak ada di
+mirror. `typecheck` juga merujuk `tsconfig.node.json`/`tsconfig.server.json`
+yang tak ada.
+- Perbaikan: `sync-deploy.ps1` membersihkan skrip yang tak tersedia di
+  mirror dan menyesuaikan `typecheck` jadi `tsc --noEmit`.
+- Bug tambahan di `sync-deploy.ps1`: `$json` dihitung SEBELUM perubahan
+  skrip, jadi `typecheck` yang baru tak ikut ke berkas. Urutan diperbaiki.
+
+### 5. Skrip verifikasi baru
+- `scripts/verifikasi-kode-deckcraft.mts` (10) - blok kode benar-benar
+  ber-font monospace di binary DeckCraft sungguhan, dan paragraf biasa TIDAK
+  ikut kena.
+- `scripts/verifikasi-fitur-deckcraft.mjs` (41) - cek statis: konverter,
+  bridge, server, klien, UI, CSS, dan mirror Vercel (termasuk BOM).
+- `scripts/verifikasi-api-filmstrip.mjs` (17) - filmstrip + ekspor PDF/GIF
+  lewat HTTP, termasuk kasus format tak didukung.
+- `scripts/verifikasi-ui-filmstrip.mjs` (13) - filmstrip di browser:
+  thumbnail benar-benar ter-render (naturalWidth > 0), klik thumbnail
+  menggeser slide aktif.
+- Negative test naik 6 -> **9** kasus: (G) import statis mirror,
+  (H) blok kode tanpa font monospace, (I) BOM di package.json mirror.
+
+### Catatan metodologi
+- Skrip UI berbasis CDP harus **menunggu elemen muncul**, bukan jeda tetap.
+  Versi pertama memakai `sleep(6000)` dan gagal semua padahal tampilannya
+  benar - panel React belum mount. Sekarang pakai `tungguPunsur(selektor)`.
+- `slide.inspect` tidak mengekspos properti run (font/size); itu harus dibaca
+  dari `shape.inspect`.
+
+## Status verifikasi terakhir (Sesi 4)
+
+`pnpm verify:all` -> **353 pemeriksaan lulus, 0 gagal**, exit 0
+- typecheck browser + server + node: 0 error
+- 69 unit test lulus
+- build produksi (sumber + mirror Vercel): sukses
+- Negative test: 9 kasus, semuanya terbukti menangkap regresi
+- Suite dijalankan 4x berturut-turut, semua exit 0
 
 ## Sesi 3 (2026-10-21) - 5 item tersisa diselesaikan
 

@@ -157,6 +157,19 @@ const kondisiLangka = [
   ".dc-kosong p",
   ".dc-kosong code",
   ".dc-catatan",
+  // Filmstrip hanya dirender saat pengguna membuka toggle "Filmstrip semua
+  // slide", jadi tak ada di state default. Keberadaannya dibuktikan oleh
+  // `scripts/verifikasi-ui-filmstrip.mjs` (yang membuka toggle dan menghitung
+  // `.dc-filmstrip-item` yang benar-benar ter-render).
+  ".dc-filmstrip",
+  ".dc-filmstrip-item",
+  ':root[data-theme="light"] .dc-filmstrip-item',
+  ".dc-filmstrip-item:hover",
+  ".dc-filmstrip-item.aktif",
+  ".dc-filmstrip-gambar",
+  ".dc-filmstrip-nomor",
+  ".dc-toggle-filmstrip",
+  ".dc-filmstrip-jumlah",
   ".nitz-isi > .kartu-kaca, .nitz-isi > div > .kartu-kaca",
 ];
 const benarMati = (mati?.mati ?? []).filter((s) => !kondisiLangka.includes(s));

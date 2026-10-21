@@ -81,6 +81,10 @@ sama (tanpa file sementara).
 | `scripts/verify-ui.mjs` | Uji UI end-to-end (Chrome DevTools Protocol) |
 | `scripts/verifikasi-pptx.mjs` | Uji isi PPTX (tabel/grafik/seri XML) |
 | `scripts/verifikasi-sidebar.mjs` | Uji penempatan panel + gaya kaca |
+| `scripts/verifikasi-kode-deckcraft.mts` | Uji blok kode ber-font monospace (binary asli) |
+| `scripts/verifikasi-fitur-deckcraft.mjs` | Uji statis fitur DeckCraft + mirror Vercel |
+| `scripts/verifikasi-api-filmstrip.mjs` | Uji filmstrip + ekspor PDF/GIF (HTTP) |
+| `scripts/verifikasi-ui-filmstrip.mjs` | Uji filmstrip di browser (CDP) |
 | `scripts/capture-tema.mjs` | Screenshot per tema (terang/gelap) |
 | `server/serve.ts` | Server produksi: statis + API dalam satu proses |
 | `src/lib/deckcraft-ppt.test.ts` | Unit test konverter (vitest) |
@@ -125,6 +129,9 @@ pnpm verify:deckcraft:ui    # UI lewat Chrome DevTools (butuh `pnpm dev` jalan)
 pnpm verify:deckcraft:pptx  # isi PPTX (tabel/grafik/seri XML)
 pnpm verify:deckcraft:sidebar   # penempatan panel + gaya kaca
 pnpm verify:deckcraft:concurrency # build/preview/export paralel
+pnpm verify:deckcraft:kode   # blok kode monospace (butuh binary DeckCraft)
+pnpm verify:deckcraft:filmstrip # filmstrip + PDF/GIF lewat HTTP
+pnpm verify:fitur-deckcraft  # pemeriksaan statis fitur DeckCraft + mirror
 node scripts/verifikasi-perintah.mjs  # id perintah vs engine DeckCraft
 pnpm test                   # unit test vitest
 pnpm typecheck              # tsc browser + tsc server
@@ -144,8 +151,52 @@ pnpm typecheck              # tsc browser + tsc server
 | `chart` | `insert.chart` | `bar`→`column`, `line`/`pie`/`area`/`scatter` apa adanya |
 | `image` (data-URL) | `insert.picture` | Gambar remote perlu diunduh dulu |
 | `diagram` (mermaid) | `insert.smartArt` | Label node Mermaid → tahap proses |
-| `code` | `insert.textBox` | Mono belum tersedia via CLI |
+| `code` | `insert.textBox` + `format.font` + `format.size` + `shape.fill` + `shape.line` | Font monospace, 16 pt, latar & garis |
 | `divider` | `shape.insert` (preset `line`) | Garis pemisah |
+
+### Blok kode:(font monospace)
+
+Blok `code` dirender sebagai text box ber-font monospace (16 pt) dengan
+latar terang dan garis tipis, bukan teks biasa.
+
+Ini butuh beberapa hal yang mudah salah, semua diverifikasi empiris
+terhadap binary DeckCraft v0.8.0 lewat MCP:
+
+1. **`format.font {family, ids:[N]}` MENGABAIKAN `ids`.** Hasilnya `null`
+   dan shape tak berubah. Format hanya berlaku pada **selection**.
+2. **`insert.textBox` otomatis menyeleksi shape barunya.** Jadi urutan
+   `insert.textBox` → `format.font` → `format.size` → `shape.fill` →
+   `shape.line` dalam satu batch benar-benar menempel.
+3. **`slide.go {index}` menghapus selection.** Jadi `slide.go` harus
+   disisipkan **sebelum** `insert.textBox`, bukan sesudahnya.
+4. **`shape.inspect` hanya mencari shape di slide AKTIF.** Tanpa `slide.go`
+   lebih dulu, hasilnya "no shape N" — yang sempat membuat font terbaca
+   `undefined` saat inspeksi.
+5. **`slide.inspect` tidak mengekspos properti run.** Font/ukuran harus
+   dibaca dari `shape.inspect` (`shape.text.paragraphs[].runs[].props`).
+
+Konsekuensi desain: perintah DeckCraft kini membawa field `slide` (indeks
+slide). Bridge (`src/lib/deckcraft.ts`) menyisipkan `slide.go` yang sesuai
+sebelum perintah per-slide; konverter sendiri tidak membuat `slide.go`.
+
+#### Soal lisensi font
+
+DeckCraft melarang aset Microsoft (§1.1 AGENTS.md-nya). `"Consolas"` aman
+karena engine memetakannya ke substitusi berbobot metrik yang bebas lisensi:
+
+```
+"courier new" | "courier" | "consolas" | "menlo"
+  => &["Liberation Mono", "Courier New", "Menlo", "Courier"]
+```
+
+(`deckcraft/crates/fonts/src/fontdb.rs`). Font yang benar-benar dirender
+sudah diverifikasi: hash PNG berbeda untuk setiap nama font, dan nama
+palsu menghasilkan render yang sama dengan fallback — jadi nama font
+memang berpengaruh, bukan sekadar dicatat di dokumen.
+
+Ukuran 16 pt dipilih karena slide DeckCraft 16:9 lebarnya 960 pt
+(= 13,3 inci). Body text presentasi biasanya 18–24 pt; 13 pt (nilai
+pertama yang dipakai) terbukti terlalu kecil dibaca dari jauh.
 
 ### Catatan API DeckCraft yang tidak terdokumentasi
 
@@ -183,7 +234,31 @@ pratinjau DeckCraft identik dengan hasil akhir.
 | `/api/deckcraft/status` | GET | `{tersedia, versi, binPath, tema[], galat}` |
 | `/api/deckcraft/build` | POST | `{blocks, judul, tema}` → `{deck}` |
 | `/api/deckcraft/preview?slide=N&scale=S` | GET | `{png}` (base64 PNG) |
+| `/api/deckcraft/filmstrip?scale=S` | GET | `{gambar[]}` (base64 PNG semua slide) |
 | `/api/deckcraft/export` | POST | Body PPTX (`application/vnd.openxmlformats-…`) |
+| `/api/deckcraft/export-format` | POST | Body PDF / GIF / PPTX sesuai `format` |
+
+### Ekspor berformat
+
+`/api/deckcraft/export-format` menerima `format: "pptx" | "pdf" | "gif"`.
+Engine DeckCraft v0.8.0 juga mendukung `png`, `jpeg`, `deckcraft`, dan
+`outline`, tapi NitZ-909 hanya membuka tiga yang paling berguna untuk
+presentasi. Format lain dijawab **400** dengan pesan yang menyebutkan
+pilihan yang valid.
+
+PDF: `layout` bisa `slides`/`notes`/`handouts`, `paper` `letter`/`a4`/…,
+`perPage` untuk handout. GIF: `secondsPerSlide` (0,1–600, default 5) dan
+`loop`. Di NitZ-909, GIF dibuat 3 detik per slide dan mengulang.
+
+### Filmstrip
+
+`/api/deckcraft/filmstrip` merender **semua** slide pada skala kecil
+(default 0,35 → 336×189 px) dan mengembalikan array PNG base64. Dibatasi
+40 slide supaya respons tak membanjiri browser.
+
+Filmstrip sengaja dimuat **sekali** setelah deck siap, bukan di-refresh tiap
+kali slide aktif berubah: render ulang semua slide tiap klik mahal, dan
+isinya sama selama deck tak berubah.
 
 ---
 
@@ -199,8 +274,6 @@ pratinjau DeckCraft identik dengan hasil akhir.
   mendukung Node (Railway, Render, VPS).
 - **Gambar remote tidak diunduh otomatis.** `insert.picture` DeckCraft membaca
   dari berkas atau base64; `https://` harus diunduh lebih dulu oleh pemanggil.
-- **Kode monospace belum.** DeckCraft CLI tidak bisa menyetel font per text box
-  secara langsung.
 - **DeckCraft tidak punya biner Windows ARM64 resmi** di rilis v0.8.0 —
   vendoring otomatis memakai x64.
 - **`insert.smartArt` mengabaikan `rect`.** Posisi SmartArt ditentukan engine
@@ -217,6 +290,24 @@ pnpm sync:deploy
 
 Folder `server/` sengaja tidak ikut disalin — API DeckCraft tidak bisa hidup
 di Vercel.
+
+Karena itu `vite.config.ts` **wajib** memuat middleware API lewat impor
+**dinamis + `try/catch`**, bukan impor statis. Impor statis membuat build
+Vercel gagal dengan "cannot find module", karena folder `server/` tidak ada
+di mirror. Kalau modul tak ada, middleware dilewati dan aplikasi tetap
+dibangun.
+
+`pnpm sync:deploy` juga:
+
+- membuang skrip npm yang menunjuk folder tak ada di mirror (`serve`,
+  `verify:all`, `vendor:deckcraft`, …);
+- menyesuaikan `typecheck` jadi `tsc --noEmit` (sumbernya merujuk
+  `tsconfig.node.json` & `tsconfig.server.json` yang hanya ada di repo utama);
+- menulis `package.json` **tanpa BOM** — BOM bikin PostCSS/Vite gagal parse
+  JSON.
+
+Ketiganya dijaga oleh `scripts/verifikasi-fitur-deckcraft.mjs` dan
+negative test (kasus G dan I).
 
 ---
 

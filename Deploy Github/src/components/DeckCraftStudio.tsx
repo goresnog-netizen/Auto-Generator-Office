@@ -9,12 +9,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Select } from "./ui";
 import { Ikon } from "./Ikon";
 import {
+  ambilFilmstrip,
   ambilPratinjau,
   ambilStatusDeckcraft,
   bangunDeck,
+  unduhFormatDeckcraft,
   unduhPptxDeckcraft,
   type DeckcraftDeckRingkas,
   type DeckcraftStatus,
+  type FormatEksporDeckcraft,
 } from "../lib/deckcraft-client";
 import type { ContentBlock } from "../types";
 
@@ -39,8 +42,15 @@ export function DeckCraftStudio({
   const [deck, setDeck] = useState<DeckcraftDeckRingkas | null>(null);
   const [slideAktif, setSlideAktif] = useState(0);
   const [pratinjau, setPratinjau] = useState<string | null>(null);
+  /** Filmstrip: PNG kecil semua slide. */
+  const [filmstrip, setFilmstrip] = useState<string[]>([]);
+  const [tampilFilmstrip, setTampilFilmstrip] = useState(false);
   const [fase, setFase] = useState<Fase>("idle");
   const [pesan, setPesan] = useState<string>("");
+  /** Format yang sedang diekspor (untuk menandai tombol aktif). */
+  const [formatEkspor, setFormatEkspor] = useState<FormatEksporDeckcraft | null>(
+    null,
+  );
 
   // Ambil status sekali saja. `tema` sengaja tidak jadi dependensi: kalau
   // ikut, setiap perubahan tema memicu fetch ulang dan potentially menimpa
@@ -119,6 +129,27 @@ export function DeckCraftStudio({
     };
   }, [deck, slideAktif]);
 
+  // Muat filmstrip sekali setelah deck siap. Filmstrip sengaja TIDAK di-refresh
+  // tiap slide berganti: render ulang semua slide tiap klik mahal, dan
+  // isinya sama saja selama deck tak berubah.
+  useEffect(() => {
+    if (!deck) {
+      setFilmstrip([]);
+      return;
+    }
+    let dibatalkan = false;
+    void ambilFilmstrip(0.35)
+      .then((gambar) => {
+        if (!dibatalkan) setFilmstrip(gambar);
+      })
+      .catch(() => {
+        if (!dibatalkan) setFilmstrip([]);
+      });
+    return () => {
+      dibatalkan = true;
+    };
+  }, [deck]);
+
   const ekspor = async () => {
     if (sedangBekerja.current) return;
     sedangBekerja.current = true;
@@ -137,6 +168,38 @@ export function DeckCraftStudio({
       setFase("galat");
       setPesan(e instanceof Error ? e.message : "Gagal mengekspor.");
     } finally {
+      sedangBekerja.current = false;
+    }
+  };
+
+  /** Ekspor ke format lain (PDF / GIF) yang hanya bisa dibuat engine DeckCraft. */
+  const eksporFormat = async (format: FormatEksporDeckcraft) => {
+    if (sedangBekerja.current) return;
+    sedangBekerja.current = true;
+    setFormatEkspor(format);
+    setFase("ekspor");
+    setPesan(
+      format === "gif"
+        ? "Menyiapkan GIF animasi..."
+        : "Menyiapkan PDF...",
+    );
+    try {
+      await unduhFormatDeckcraft(
+        blocks,
+        judul || "Presentasi NitZ-909",
+        tema,
+        format,
+        format === "gif" ? { secondsPerSlide: 3 } : {},
+      );
+      setFase("siap");
+      const label = format.toUpperCase();
+      setPesan(`${label} DeckCraft terunduh.`);
+      onPesan?.(`${label} DeckCraft terunduh.`);
+    } catch (e) {
+      setFase("galat");
+      setPesan(e instanceof Error ? e.message : "Gagal mengekspor.");
+    } finally {
+      setFormatEkspor(null);
       sedangBekerja.current = false;
     }
   };
@@ -226,13 +289,46 @@ export function DeckCraftStudio({
               <Button
                 type="secondary"
                 size="sm"
-                loading={fase === "ekspor"}
+                loading={fase === "ekspor" && formatEkspor === null}
                 disabled={!deck}
                 onClick={() => void ekspor()}
               >
                 <Ikon nama="unduh" /> Unduh PPTX
               </Button>
             </div>
+            <div className="dc-tombol-baris">
+              <Button
+                type="secondary"
+                size="sm"
+                loading={fase === "ekspor" && formatEkspor === "pdf"}
+                disabled={!deck}
+                onClick={() => void eksporFormat("pdf")}
+              >
+                Unduh PDF
+              </Button>
+              <Button
+                type="secondary"
+                size="sm"
+                loading={fase === "ekspor" && formatEkspor === "gif"}
+                disabled={!deck}
+                onClick={() => void eksporFormat("gif")}
+              >
+                Unduh GIF
+              </Button>
+            </div>
+            {deck && (
+              <button
+                type="button"
+                className="dc-toggle-filmstrip"
+                aria-expanded={tampilFilmstrip}
+                onClick={() => setTampilFilmstrip((v) => !v)}
+              >
+                {tampilFilmstrip ? "▾" : "▸"} Filmstrip semua slide
+                {filmstrip.length > 0 && (
+                  <span className="dc-filmstrip-jumlah">({filmstrip.length})</span>
+                )}
+              </button>
+            )}
           </div>
 
           {pesan && (
@@ -277,6 +373,34 @@ export function DeckCraftStudio({
                   </button>
                 ))}
               </div>
+
+              {tampilFilmstrip && (
+                <div className="dc-filmstrip" role="list" aria-label="Pratinjau semua slide">
+                  {filmstrip.length === 0 ? (
+                    <p className="dc-pesan">Memuat filmstrip…</p>
+                  ) : (
+                    filmstrip.map((src, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        role="listitem"
+                        className={`dc-filmstrip-item ${i === slideAktif ? "aktif" : ""}`}
+                        onClick={() => setSlideAktif(i)}
+                        title={deck.slides[i]?.title || `Slide ${i + 1}`}
+                        aria-label={`Buka slide ${i + 1}`}
+                      >
+                        <img
+                          className="dc-filmstrip-gambar"
+                          src={src}
+                          alt={`Slide ${i + 1}${deck.slides[i]?.title ? ": " + deck.slides[i].title : ""}`}
+                          loading="lazy"
+                        />
+                        <span className="dc-filmstrip-nomor">{i + 1}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
             </>
           )}
         </>

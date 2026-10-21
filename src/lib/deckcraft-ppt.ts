@@ -14,6 +14,7 @@
  */
 import type {
   ChartBlock,
+  CodeBlock,
   ContentBlock,
   DiagramBlock,
   ImageBlock,
@@ -50,6 +51,76 @@ const TIPE_GRAFIK: Record<string, string> = {
   area: "area",
   scatter: "scatter",
 };
+
+/**
+ * Font monospace untuk blok kode.
+ *
+ * PENTING - ini bukan font Microsoft, dan bukan aset yang boleh di-embed.
+ * DeckCraft (crates/fonts/src/fontdb.rs) memetakan "consolas" ke substitusi
+ * berbobot metrik yang sama: Liberation Mono -> Courier New -> Menlo ->
+ * Courier. Jadi menyebut "Consolas" aman: yang benar-benar dirender adalah
+ * font substitusi yang berlisensi bebas, dan blok kode tetap terlihat
+ * monospace di semua mesin.
+ *
+ * Daftar di bawah dibaca berurutan: engine memakai substitusi untuk nama
+ * pertama yang bisa ditemukan; jadi "Consolas" -&gt; "Courier New" ->
+ * "Liberation Mono" semuanya berakhir di font mono yang sama.
+ */
+export const FONT_KODE = "Consolas";
+
+/** Font cadangan kalau nama utama tak terpasang di mesin ini. */
+export const FONT_KODE_CADANGAN = ["Courier New", "Liberation Mono", "Menlo"];
+
+/**
+ * Ukuran font (pt) untuk teks kode di slide.
+ *
+ * Slide DeckCraft 16:9 lebarnya 960 pt (= 13,3 inci), jadi ukuran comparable
+ * dengan slide PowerPoint 13,3 inci. Body text presentasi biasanya 18-24 pt;
+ * kode sedikit lebih kecil karena lebih rapat, tapi 13 pt terlalu kecil untuk
+ * dibaca dari jauh. 16 pt adalah titik tengah yang terbaca di proyektor.
+ */
+export const UKURAN_FONT_KODE = 16;
+
+/**
+ * Lebar industri (dalam karakter) untuk satu baris kode.
+ *
+ * Font monospace punya lebar karakter tetap, jadi lebar baris bisa dihitung
+ * dari jumlah karakter. 0,62 em per karakter untuk Courier New/Liberation
+ * Mono pada 16 pt ≈ 9,9 pt per karakter.
+ */
+const LEBAR_KARAKTER_PT = 9.9;
+
+/** Lebar minimum & maksimum text box kode (pt). */
+const LEBAR_KODE_MIN = 320;
+const LEBAR_KODE_MAX = KONTEN_W;
+
+/** Warna teks blok kode (gelap, tak bergantung tema). */
+export const WARNA_TEKST_KODE = "111827";
+
+/** Warna latar blok kode (terang, tak bergantung tema). */
+export const WARNA_LATAR_KODE = "F4F5F7";
+
+/** Garis tepi blok kode. */
+export const WARNA_GARIS_KODE = "D7DBE0";
+
+/**
+ * Perintah DeckCraft + slide tempat perintah itu berlaku.
+ *
+ * PENTING - inilah yang membuat blok kode bisa ber-font monospace.
+ * Perintah `format.*` (format.font, format.size, ...) di engine berlaku pada
+ * **selection saat ini**, bukan pada id yang diberi. Jadi perintah format
+ * harus dijalankan tepat setelah shape-nya dibuat, pada slide yang benar.
+ *
+ * Bukti empiris (probe MCP v0.8.0):
+ *  - `format.font {family, ids:[N]}` MENGABAIKAN `ids`; hasilnya null dan
+ *    shape tak berubah;
+ *  - `selection.select {ids:[N]}` lalu `format.font` -> font menempel;
+ *  - `shape.inspect` hanya mencari shape di slide AKTIF -> perlu `slide.go`.
+ */
+export interface DeckcraftPerintah extends DeckcraftCommand {
+  /** Indeks slide tempat perintah ini berlaku (0-based). */
+  slide?: number;
+}
 
 /** Sitasi Diagram (Mermaid) sebagai SmartArt proses — padanan visual terdekat. */
 function smartArtDariDiagram(b: DiagramBlock): DeckcraftCommand | null {
@@ -90,17 +161,21 @@ function listKeBaris(
  * Strategi: blok `heading` dengan level ≤ 2 menjadi pemisah slide; blok lain
  * dikelompokkan per slide. Tabel, grafik, gambar, dan diagram mendapat slide
  * sendiri karena masing-masing butuh area gambar penuh.
+ *
+ * Setiap perintah membawa `slide` = indeks slide tempat ia berlaku, karena
+ * perintah `format.*` di engine bekerja pada selection slide AKTIF. Tanpa
+ * informasi itu, blok kode tak bisa diberi font monospace.
  */
 export function blokKePerintah(
   blocks: ContentBlock[],
   options: {
     judul?: string;
     tema?: string;
-    /** Sisipkan slide sampul di depan. */
+    /** Sisipkan slide sampul di front. */
     sampul?: boolean;
   } = {},
-): DeckcraftCommand[] {
-  const perintah: DeckcraftCommand[] = [];
+): DeckcraftPerintah[] {
+  const perintah: DeckcraftPerintah[] = [];
   const tema = options.tema || "Slate";
 
   if (options.sampul && options.judul) {
@@ -135,7 +210,7 @@ export function blokKePerintah(
   // eksplisit. Alasannya: layout `titleAndContent` menaruh teks di placeholder
   // yang posisinya tidak bisa dikontrol, sehingga isian bertumpuk dengan
   // placeholder. Dengan `titleOnly` semua isi bisa ditempatkan tepat.
-  let slideBaru: DeckcraftCommand[] = [];
+  let slideBaru: DeckcraftPerintah[] = [];
   /** Judul heading yang menunggu isi (belum jadi slide). */
   let judulMenunggu = options.judul || "Materi";
   /** Isi slide berjalan sudah terisi atau belum. */
@@ -204,6 +279,53 @@ export function blokKePerintah(
         },
       ];
     }
+    slideTerisi = true;
+  };
+
+  /**
+   * Tambahkan blok kode: text box dengan font monospace, latar, dan garis.
+   *
+   * Perintahnya harus berurutan: `insert.textBox` -> `format.font` ->
+   * `format.size` -> `shape.fill` -> `shape.line`. Semuanya berlaku pada
+   * selection, dan shape baru otomatis jadi selection.
+   */
+  const tambahKode = (b: CodeBlock) => {
+    if (slideBaru.length === 0) mulaiSlide(judulMenunggu);
+    const baris = b.code.split("\n");
+    const tinggi = Math.min(Math.max(baris.length * 22 + 24, 60), 320);
+    // Lebar mengikuti baris terpanjang: text box selebar slide untuk kode
+    // 3 baris pendek terlihat rapi kosong. Karakter monospace punya lebar
+    // tetap, jadi ini bisa dihitung.
+    const karakterTerpanjang = baris.reduce(
+      (maks, b2) => Math.max(maks, b2.length),
+      0,
+    );
+    const lebarIdeal = karakterTerpanjang * LEBAR_KARAKTER_PT + 32;
+    const lebar = Math.min(Math.max(lebarIdeal, LEBAR_KODE_MIN), LEBAR_KODE_MAX);
+    slideBaru.push({
+      command: "insert.textBox",
+      params: {
+        rect: [MARGIN_X, kursorY, lebar, tinggi],
+        text: b.code,
+      },
+    });
+    slideBaru.push({
+      command: "format.font",
+      params: { family: FONT_KODE },
+    });
+    slideBaru.push({
+      command: "format.size",
+      params: { size: UKURAN_FONT_KODE },
+    });
+    slideBaru.push({
+      command: "shape.fill",
+      params: { color: WARNA_LATAR_KODE },
+    });
+    slideBaru.push({
+      command: "shape.line",
+      params: { color: WARNA_GARIS_KODE, width: 1 },
+    });
+    kursorY += tinggi + 16;
     slideTerisi = true;
   };
 
@@ -325,7 +447,7 @@ export function blokKePerintah(
       }
 
       case "code": {
-        tambahTeks(b.code);
+        tambahKode(b as CodeBlock);
         break;
       }
 
@@ -351,8 +473,16 @@ export function blokKePerintah(
   // Kelompokkan perintah per slide: sebuah `slide.new` membuka slide, dan
   // perintah sesudahnya mengisinya. Slide tanpa pengisi dibuang karena hanya
   // menghasilkan halaman kosong.
-  const preamble: DeckcraftCommand[] = [];
-  const groups: { slide: DeckcraftCommand; isi: DeckcraftCommand[] }[] = [];
+  //
+  // Setiap perintah juga diberi nomor slide (`slide`), karena perintah
+  // `format.*` berlaku pada selection slide AKTIF. Tanpa nomor ini, blok kode
+  // yang admire-font harus dijalankan di slide yang benar - kalau tidak, font
+  // tempelan ke slide lain dan blok kode tampil dengan font biasa.
+  const preamble: DeckcraftPerintah[] = [];
+  const groups: {
+    slide: DeckcraftPerintah;
+    isi: DeckcraftPerintah[];
+  }[] = [];
   let sekarang: (typeof groups)[number] | null = null;
 
   for (const p of perintah) {
@@ -368,10 +498,17 @@ export function blokKePerintah(
     sekarang.isi.push(p);
   }
 
-  const perintahBersih: DeckcraftCommand[] = [...preamble];
+  // Nomor slide dihitung setelah slide kosong dibuang, supaya nomornya sama
+  // dengan indeks slide sungguhan di deck hasil build.
+  const perintahBersih: DeckcraftPerintah[] = [...preamble];
+  let nomorSlide = 0;
   for (const g of groups) {
     if (g.isi.length === 0) continue;
-    perintahBersih.push(g.slide, ...g.isi);
+    perintahBersih.push({ ...g.slide, slide: nomorSlide });
+    for (const isi of g.isi) {
+      perintahBersih.push({ ...isi, slide: nomorSlide });
+    }
+    nomorSlide += 1;
   }
 
   // Kalau tidak ada slide sama sekali, buat satu slide ringkas.
@@ -383,6 +520,7 @@ export function blokKePerintah(
         layout: "titleOnly",
         title: options.judul || "Presentasi NitZ-909",
       },
+      slide: 0,
     });
   }
 

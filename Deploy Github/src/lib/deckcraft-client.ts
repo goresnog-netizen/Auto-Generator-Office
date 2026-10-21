@@ -121,7 +121,26 @@ export async function ambilPratinjau(
   return `data:image/png;base64,${data.png}`;
 }
 
-/** Unduh PPTX hasil build DeckCraft. */
+/**
+ * Filmstrip: PNG semua slide, sebagai data-URL.
+ *
+ * Server merender tiap slide pada skala kecil (default 0,35 -> 336x189),
+ * jadi filmstrip ringan dipindah lewat JSON.
+ */
+export async function ambilFilmstrip(skala = 0.35): Promise<string[]> {
+  const resp = await fetch(
+    `${DASAR}/filmstrip?scale=${encodeURIComponent(skala)}`,
+  );
+  const data = await json<{ gambar: string[] }>(resp);
+  return (data.gambar ?? []).map((png) => `data:image/png;base64,${png}`);
+}
+
+/**
+ * Unduh PPTX hasil build DeckCraft.
+ *
+ * Memakai rute `/export` (bukan `/export-format`): rute ini sudah terverifikasi
+ * oleh `scripts/verifikasi-api.mjs` dan tidak berubah perilakunya.
+ */
 export async function unduhPptxDeckcraft(
   blocks: ContentBlock[],
   judul: string,
@@ -140,10 +159,54 @@ export async function unduhPptxDeckcraft(
     } catch {
       /* badan bukan JSON */
     }
-    throw new Error(pesan);
+    throw new GalatDeckcraft(pesan, resp.status);
   }
   const blob = await resp.blob();
   const nama = `${judul.replace(/[\\/:*?"<>|]+/g, "-").slice(0, 100) || "Presentasi"}.pptx`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nama;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** Format yang bisa diekspor DeckCraft lewat API. */
+export type FormatEksporDeckcraft = "pptx" | "pdf" | "gif";
+
+/**
+ * Unduh deck dalam format tertentu (PPTX, PDF, GIF).
+ *
+ * Format PDF dan GIF hanya bisa dihasilkan engine DeckCraft; generator
+ * NitZ-909 sendiri punya jalurnya sendiri untuk keduanya.
+ */
+export async function unduhFormatDeckcraft(
+  blocks: ContentBlock[],
+  judul: string,
+  tema: string,
+  format: FormatEksporDeckcraft,
+  opsi: { secondsPerSlide?: number } = {},
+): Promise<void> {
+  const resp = await fetch(`${DASAR}/export-format`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ blocks, judul, tema, format, ...opsi }),
+  });
+  if (!resp.ok) {
+    let pesan = `Ekspor gagal (${resp.status}).`;
+    try {
+      const data = (await resp.json()) as { galat?: string };
+      if (data.galat) pesan = data.galat;
+    } catch {
+      /* badan bukan JSON */
+    }
+    throw new GalatDeckcraft(pesan, resp.status);
+  }
+  const blob = await resp.blob();
+  const nama =
+    `${judul.replace(/[\\/:*?"<>|]+/g, "-").slice(0, 100) || "Presentasi"}.${format}`;
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

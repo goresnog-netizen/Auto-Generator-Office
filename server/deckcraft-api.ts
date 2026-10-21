@@ -8,6 +8,8 @@
  *   POST /api/deckcraft/build            → build deck dari ContentBlock[]
  *   POST /api/deckcraft/export            → build + simpan PPTX, kembalikan file
  *   GET  /api/deckcraft/preview?slide=N   → PNG slide (base64 JSON)
+ *   GET  /api/deckcraft/filmstrip         → PNG semua slide (base64 JSON)
+ *   POST /api/deckcraft/export-format     → build + ekspor PDF/GIF/PPTX
  *
  * Sesi DeckCraft dipakai bersama antar permintaan: satu proses MCP, deck
  * dibangun ulang tiap kali `build` dipanggil.
@@ -35,6 +37,22 @@ interface PermintaanBuild {
   judul?: string;
   tema?: string;
 }
+
+/** Format ekspor yang didukung engine DeckCraft v0.8.0. */
+type FormatEkspor = "pptx" | "pdf" | "gif";
+
+/** Peta format → ekstensi berkas dan MIME HTTP. */
+const FORMAT_EKSPOR: Record<
+  FormatEkspor,
+  { ekstensi: string; mime: string }
+> = {
+  pptx: {
+    ekstensi: "pptx",
+    mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  },
+  pdf: { ekstensi: "pdf", mime: "application/pdf" },
+  gif: { ekstensi: "gif", mime: "image/gif" },
+};
 
 interface SesiTerbuka {
   sesi: DeckcraftSession;
@@ -173,6 +191,28 @@ export async function tanganiApi(
       return true;
     }
 
+    if (url.pathname === "/api/deckcraft/filmstrip" && req.method === "GET") {
+      if (!sesiTerbuka) {
+        kirimJson(res, 409, { galat: "Bangun deck dulu sebelum meminta filmstrip." });
+        return true;
+      }
+      const skala = Number(url.searchParams.get("scale") ?? "0.35");
+      // Serialkan dengan build: filmstrip deck yang sedang dibangun akan
+      // menampilkan slide setengah jadi.
+      const gambar = await serialkan(async () => {
+        const deck = await sesiTerbuka!.sesi.periksa();
+        // Batasi jumlah slide: filmstrip yang sangat besar akan membanjiri
+        // respons JSON dan lambat dirender di browser.
+        const jumlah = Math.min(deck.slides.length, 40);
+        return sesiTerbuka!.sesi.renderSemua(
+          jumlah,
+          Number.isFinite(skala) ? skala : 0.35,
+        );
+      });
+      kirimJson(res, 200, { gambar });
+      return true;
+    }
+
     if (url.pathname === "/api/deckcraft/export" && req.method === "POST") {
       const body = JSON.parse((await bacaBody(req)) || "{}") as PermintaanBuild;
       if (!Array.isArray(body.blocks) || body.blocks.length === 0) {
@@ -214,6 +254,76 @@ export async function tanganiApi(
       res.writeHead(200, {
         "Content-Type":
           "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "Content-Length": hasil.data.length,
+        "Content-Disposition": `attachment; filename="${hasil.nama}"`,
+        "Cache-Control": "no-store",
+      });
+      res.end(hasil.data);
+      return true;
+    }
+
+    if (url.pathname === "/api/deckcraft/export-format" && req.method === "POST") {
+      const body = JSON.parse((await bacaBody(req)) || "{}") as PermintaanBuild & {
+        format?: string;
+        /** Detik per slide untuk GIF. */
+        secondsPerSlide?: number;
+      };
+      if (!Array.isArray(body.blocks) || body.blocks.length === 0) {
+        kirimJson(res, 400, { galat: "Tidak ada blok konten." });
+        return true;
+      }
+      const format = body.format as FormatEkspor;
+      if (!format || !(format in FORMAT_EKSPOR)) {
+        kirimJson(res, 400, {
+          galat: `Format "${body.format ?? "(kosong)"}" tidak didukung. Pilihan: ${Object.keys(FORMAT_EKSPOR).join(", ")}.`,
+        });
+        return true;
+      }
+      if (!infoDeckcraft) infoDeckcraft = await periksaDeckcraft();
+      if (!infoDeckcraft.tersedia) {
+        kirimJson(res, 503, {
+          galat: infoDeckcraft.galat ?? "DeckCraft tidak tersedia.",
+        });
+        return true;
+      }
+      const judul = body.judul || "Presentasi NitZ-909";
+      const tema = body.tema || "Slate";
+      const meta = FORMAT_EKSPOR[format];
+
+      // Build + ekspor dalam satu operasi serial, sama seperti /export.
+      const hasil = await serialkan(async () => {
+        if (!sesiTerbuka) {
+          sesiTerbuka = { sesi: new DeckcraftSession(), deck: null as never };
+        }
+        const perintah = blokKePerintah(body.blocks, { judul, tema });
+        await sesiTerbuka.sesi.jalankan(perintah);
+        const deck = await sesiTerbuka.sesi.periksa();
+        sesiTerbuka.deck = deck;
+
+        const dir = mkdtempSync(path.join(tmpdir(), "nitz-deckcraft-"));
+        try {
+          const nama =
+            judul.replace(/[\\/:*?"<>|]+/g, "-").slice(0, 100) ||
+            "Presentasi";
+          const target = path.join(dir, `${nama}.${meta.ekstensi}`);
+          await sesiTerbuka.sesi.ekspor(target, format, {
+            ...(format === "gif"
+              ? {
+                  secondsPerSlide: Number.isFinite(body.secondsPerSlide)
+                    ? Math.min(Math.max(body.secondsPerSlide ?? 3, 0.1), 600)
+                    : 3,
+                  loop: true,
+                }
+              : {}),
+          });
+          return { data: readFileSync(target), nama: `${nama}.${meta.ekstensi}` };
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      });
+
+      res.writeHead(200, {
+        "Content-Type": meta.mime,
         "Content-Length": hasil.data.length,
         "Content-Disposition": `attachment; filename="${hasil.nama}"`,
         "Cache-Control": "no-store",

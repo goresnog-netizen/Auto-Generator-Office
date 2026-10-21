@@ -26,6 +26,15 @@ import path from "node:path";
 export interface DeckcraftCommand {
   command: string;
   params?: Record<string, unknown>;
+  /**
+   * Indeks slide tempat perintah ini berlaku (0-based).
+   *
+   * Perintah `format.*` di engine bekerja pada SELECTION slide aktif, bukan
+   * pada id yang diberi. Tanpa informasi slide, perintah format bisa
+   // menempel ke shape di slide lain. Bridge memakai field ini untuk
+   * menyisipkan `slide.go` yang tepat sebelum perintah format.
+   */
+  slide?: number;
 }
 
 export interface DeckcraftSlide {
@@ -345,11 +354,61 @@ export class DeckcraftSession {
   async jalankan(perintah: DeckcraftCommand[]): Promise<string> {
     if (perintah.length === 0) return "";
     return this.panggil("batch", {
-      commands: perintah.map((p) => ({
-        command: p.command,
-        params: p.params ?? {},
-      })),
+      commands: this.perintahKeEngine(perintah),
     });
+  }
+
+  /**
+   * Jalankan satu perintah engine di luar batch.
+   *
+   * Berbeda dari `panggil` (yang memanggil MCP tool), perintah di sini adalah
+   * ENGINE command - eg. `slide.go`, `slide.inspect`, `shape.inspect`. MCP
+   * tool `run_command` memang bisa memanggilnya, tapi `batch` lebih murah
+   * untuk deretan perintah berurutan.
+   */
+  async jalankanEngine(
+    perintah: string,
+    params: Record<string, unknown> = {},
+  ): Promise<string> {
+    return this.panggil("run_command", { command: perintah, params });
+  }
+
+  /**
+   * Ubah daftar perintah menjadi bentuk yang bisa dikirim ke engine.
+   *
+   * Perintah `format.*` (dan perintah lain yang berlaku pada selection)
+   * hanya berlaku pada slide AKTIF. Karena itu, sebelum menjalankan perintah
+   * format pada slide tertentu, bridge menyisipkan `slide.go {index}`.
+   *
+   * Bukti empiris (DeckCraft v0.8.0, MCP):
+   *  - `format.font {family, ids:[N]}` mengabaikan `ids`;
+   *  - `format.font` tanpa selection aktif = no-op;
+   *  - `slide.go {index}` memindahkan slide aktif, dan selection shape pada
+   *    slide itu menjadi target perintah format.
+   */
+  private perintahKeEngine(perintah: DeckcraftCommand[]): {
+    command: string;
+    params: Record<string, unknown>;
+  }[] {
+    const hasil: { command: string; params: Record<string, unknown> }[] = [];
+    let slideAktif: number | null = null;
+
+    for (const p of perintah) {
+      // `slide.new` memindahkan slide aktif sendiri; jangan set slide.go
+      // sebelum-nya karena indeks slide baru belum tentu sama dengan
+      // urutan perintah.
+      if (p.command === "slide.new") {
+        hasil.push({ command: p.command, params: p.params ?? {} });
+        slideAktif = null;
+        continue;
+      }
+      if (typeof p.slide === "number" && p.slide !== slideAktif) {
+        hasil.push({ command: "slide.go", params: { index: p.slide } });
+        slideAktif = p.slide;
+      }
+      hasil.push({ command: p.command, params: p.params ?? {} });
+    }
+    return hasil;
   }
 
   /** Baca ringkasan presentasi yang aktif. */
@@ -432,5 +491,59 @@ export class DeckcraftSession {
   /** Simpan presentasi ke path tertentu (ekstensi menentukan format). */
   async simpan(pathTujuan: string): Promise<string> {
     return this.panggil("export", { path: pathTujuan });
+  }
+
+  /**
+   * Ekspor deck ke format tertentu lewat tool MCP `export`.
+   *
+   * Format yang didukung engine v0.8.0: png, jpeg, pptx, deckcraft, outline,
+   * pdf, gif. Ekstensi path harus cocok dengan format (engine menolak
+   * kombinasi yang tak konsisten).
+   */
+  async ekspor(
+    pathTujuan: string,
+    format: "png" | "jpeg" | "pptx" | "deckcraft" | "outline" | "pdf" | "gif",
+    opsi: {
+      /** Semua slide (untuk gambar). */
+      all?: boolean;
+      /** Indeks slide tunggal (untuk gambar). */
+      slide?: number;
+      /** Piksel per titik (untuk gambar). */
+      scale?: number;
+      /** Detik per slide (GIF). */
+      secondsPerSlide?: number;
+      /** Putar GIF selamanya. */
+      loop?: boolean;
+      /** Tata letak halaman PDF. */
+      layout?: "slides" | "notes" | "handouts";
+    } = {},
+  ): Promise<{ path?: string; bytes?: number; files?: string[] }> {
+    const teks = await this.panggil("export", { path: pathTujuan, format, ...opsi });
+    try {
+      return JSON.parse(teks) as {
+        path?: string;
+        bytes?: number;
+        files?: string[];
+      };
+    } catch {
+      return {};
+    }
+  }
+
+  /**
+   * Render semua slide jadi PNG (base64) untuk filmstrip pratinjau.
+   *
+   * Render per-slide (bukan `export all`) karena hasilnya langsung jadi
+   * data-URL di respons JSON, tanpa file sementara di server.
+   */
+  async renderSemua(
+    jumlahSlide: number,
+    skala = 0.35,
+  ): Promise<string[]> {
+    const hasil: string[] = [];
+    for (let i = 0; i < jumlahSlide; i++) {
+      hasil.push(await this.renderSlide(i, skala));
+    }
+    return hasil;
   }
 }

@@ -146,6 +146,57 @@ ujiRegresi(
   "scripts/verifikasi-pdf-gambar.mjs",
 );
 
+// --- G. Mirror Vercel: import statis server/deckcraft-api.ts ---
+// Efeknya: build mirror ("Deploy Github/") gagal karena folder `server/`
+// tak ikut disalin. Vite tidak bisa menemukan modulnya.
+ujiRegresi(
+  "G. Mirror Vercel import statis API DeckCraft",
+  path.join(AKAR, "Deploy Github", "vite.config.ts"),
+  (s) =>
+    s.replace(
+      'const modul = await import("./server/deckcraft-api.ts");',
+      'const modul = { tanganiApi: async () => false }; // simulasi import statis',
+    ),
+  true,
+  "scripts/verifikasi-fitur-deckcraft.mjs",
+);
+
+// --- H. Konverter: blok kode tak pakai font monospace ---
+// Efeknya: perintah `format.font` hilang, jadi blok kode dirender dengan
+// font body (bukan monospace) - persis masalah yang ditangani sesi ini.
+ujiRegresi(
+  "H. Blok kode tanpa font monospace",
+  path.join(AKAR, "src", "lib", "deckcraft-ppt.ts"),
+  (s) =>
+    s.replace(
+      /    slideBaru\.push\(\{\n      command: "format\.font",\n      params: \{ family: FONT_KODE \},\n    \}\);\n/,
+      "",
+    ),
+  true,
+  "scripts/verifikasi-fitur-deckcraft.mjs",
+);
+
+// --- I. Mirror Vercel: package.json diawali BOM ---
+// Efeknya: PostCSS/Vite gagal parse JSON ("Unexpected token '\uFEFF'"),
+// jadi build mirror pecah.
+{
+  const file = path.join(AKAR, "Deploy Github", "package.json");
+  const asli = readFileSync(file);
+  const rusak = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), asli]);
+  writeFileSync(file, rusak);
+  try {
+    const hasil = jalankanSkrip("scripts/verifikasi-fitur-deckcraft.mjs");
+    const barisGagal = (hasil.keluar.match(/\[GAGAL\]/g) || []).length;
+    cek(
+      "I. Mirror Vercel package.json berkode BOM",
+      hasil.kode !== 0 && barisGagal > 0,
+      `exit ${hasil.kode}, ${barisGagal} pemeriksaan GAGAL`,
+    );
+  } finally {
+    writeFileSync(file, asli);
+  }
+}
+
 // --- Sanity: setelah semua dibalik, skrip harus lulus lagi ---
 const akhir = jalankanSkrip();
 cek(
@@ -159,6 +210,13 @@ cek(
   "F. Setelah semua bug dikembalikan, skrip gambar lulus lagi",
   akhirGambar.kode === 0,
   `exit ${akhirGambar.kode}`,
+);
+
+const akhirDeckcraft = jalankanSkrip("scripts/verifikasi-fitur-deckcraft.mjs");
+cek(
+  "I. Setelah semua bug dikembalikan, skrip fitur DeckCraft lulus lagi",
+  akhirDeckcraft.kode === 0,
+  `exit ${akhirDeckcraft.kode}`,
 );
 
 console.log("\nSelesai.");

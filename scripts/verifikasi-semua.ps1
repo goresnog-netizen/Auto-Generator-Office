@@ -47,6 +47,8 @@ Jalankan "Typecheck (server)" "npx" @("tsc", "--noEmit", "-p", "tsconfig.server.
 Jalankan "Typecheck (node)" "npx" @("tsc", "--noEmit", "-p", "tsconfig.node.json")
 Jalankan "Unit test" "npx" @("vitest", "run", "--reporter=dot")
 Jalankan "Bridge DeckCraft (Node)" "node" @("scripts/verify-deckcraft.mts")
+Jalankan "Kode monospace di DeckCraft" "node" @("--experimental-strip-types", "scripts/verifikasi-kode-deckcraft.mts")
+Jalankan "Fitur DeckCraft baru (font, filmstrip, ekspor)" "node" @("scripts/verifikasi-fitur-deckcraft.mjs")
 Jalankan "Generator Node (tulis file nyata)" "node" @("scripts/verifikasi-generators.mjs")
 Jalankan "Audit isi generator (konten bermakna)" "node" @("scripts/audit-isi-generator.mjs")
 Jalankan "Gambar tertanam di PDF" "node" @("scripts/verifikasi-pdf-gambar.mjs")
@@ -66,7 +68,9 @@ if ($dev) {
   $env:DASAR = "http://127.0.0.1:5180"
   $env:URL = "http://127.0.0.1:5180/"
   Jalankan "API HTTP" "node" @("scripts/verify-api.mjs")
+  Jalankan "API filmstrip + ekspor format" "node" @("scripts/verifikasi-api-filmstrip.mjs")
   Jalankan "UI (Chrome DevTools)" "node" @("scripts/verify-ui.mjs")
+  Jalankan "UI filmstrip" "node" @("scripts/verifikasi-ui-filmstrip.mjs")
   Jalankan "Konkurensi" "node" @("scripts/verifikasi-konkurensi.mjs")
   Jalankan "Efek kaca + kontras" "node" @("scripts/verifikasi-kaca.mjs")
   Jalankan "Audit CSS (dead selector, fallback)" "node" @("scripts/verifikasi-css.mjs")

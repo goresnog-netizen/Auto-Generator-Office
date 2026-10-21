@@ -9,7 +9,9 @@ import { describe, it, expect } from "vitest";
 import {
   blokKePerintah,
   blokKeOutline,
+  FONT_KODE,
   TEMA_DECKCRAFT,
+  UKURAN_FONT_KODE,
 } from "./deckcraft-ppt";
 import type { ContentBlock } from "../types";
 
@@ -165,6 +167,70 @@ describe("blokKePerintah", () => {
     expect(gambar!.params!.data).toBe(png.split(",")[1]);
   });
 
+  it("menerjemahkan blok kode jadi text box ber-font monospace", () => {
+    const hasil = blokKePerintah(
+      [
+        blok({ type: "heading", level: 2, text: "Kode" }),
+        blok({ type: "code", language: "ts", code: "const a = 1;" }),
+      ],
+      { judul: "Uji" },
+    );
+    // Teks kode tetap text box biasa...
+    const kotak = hasil.find((p) => p.command === "insert.textBox");
+    expect(kotak).toBeDefined();
+    expect(kotak!.params!.text).toBe("const a = 1;");
+    // ...tapi diikuti perintah format yang menempel pada selection itu.
+    const font = hasil.find((p) => p.command === "format.font");
+    const size = hasil.find((p) => p.command === "format.size");
+    expect(font).toBeDefined();
+    expect(size).toBeDefined();
+    expect(font!.params).toMatchObject({ family: FONT_KODE });
+    expect(size!.params).toMatchObject({ size: UKURAN_FONT_KODE });
+    // Urutan penting: format baru berlaku pada shape yang barusan dibuat.
+    const iKotak = hasil.indexOf(kotak!);
+    const iFont = hasil.indexOf(font!);
+    expect(iFont).toBeGreaterThan(iKotak);
+  });
+
+  it("memberi nomor slide pada setiap perintah", () => {
+    const hasil = blokKePerintah(
+      [
+        blok({ type: "heading", level: 1, text: "A" }),
+        blok({ type: "paragraph", text: "Isi A" }),
+        blok({ type: "heading", level: 1, text: "B" }),
+        blok({ type: "code", language: "ts", code: "const a = 1;" }),
+      ],
+      { judul: "Uji" },
+    );
+    // Perintah pembuka (file.new, file.properties) tidak terikat slide.
+    const pembuka = hasil.filter(
+      (p) => p.command === "file.new" || p.command === "file.properties",
+    );
+    for (const p of pembuka) expect(p.slide).toBeUndefined();
+
+    // Perintah isi slide pertama bernomor 0, slide kedua 1.
+    const isiA = hasil.filter((p) => p.slide === 0);
+    const isiB = hasil.filter((p) => p.slide === 1);
+    expect(isiA.length).toBeGreaterThan(0);
+    expect(isiB.length).toBeGreaterThan(0);
+    // Perintah format kode berada di slide kedua.
+    const font = hasil.find((p) => p.command === "format.font");
+    expect(font!.slide).toBe(1);
+  });
+
+  it("tidak menghasilkan perintah slide.go (bridge yang menyisipkannya)", () => {
+    // `slide.go` disisipkan bridge, bukan konverter: konverter tak tahu
+    // indeks slide yang benar sampai slide kosong dibuang.
+    const hasil = blokKePerintah(
+      [
+        blok({ type: "heading", level: 2, text: "Kode" }),
+        blok({ type: "code", language: "ts", code: "const a = 1;" }),
+      ],
+      { judul: "Uji" },
+    );
+    expect(hasil.some((p) => p.command === "slide.go")).toBe(false);
+  });
+
   it("selalu menghasilkan minimal satu slide", () => {
     const hasil = blokKePerintah([], { judul: "Kosong" });
     expect(perintah(hasil).length).toBeGreaterThanOrEqual(1);
@@ -183,6 +249,11 @@ describe("blokKePerintah", () => {
       "insert.smartArt",
       "shape.insert",
       "format.bullets",
+      // Blok kode: font monospace + latar + garis (lihat deckcraft-ppt.ts).
+      "format.font",
+      "format.size",
+      "shape.fill",
+      "shape.line",
     ]);
     const hasil = blokKePerintah(
       [
