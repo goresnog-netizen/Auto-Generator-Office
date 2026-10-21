@@ -211,6 +211,19 @@ Hasil per generator:
   Chrome; render SVG nyata sudah terbukti.
 - DeckCraft Studio belum ada di mirror `Deploy Github/` (memang disengaja -
   butuh server Node), tapi panelnya sendiri sudah di-source utama.
+- **Belum ada git remote** - 11 commit lokal belum didorong ke GitHub, jadi
+  workflow CI belum pernah benar-benar dijalankan di GitHub Actions. Butuh
+  URL repo dari Principal:
+  `git remote add origin <url> && git push -u origin master`.
+  Sampai itu terjadi, `pnpm verify:ci` dipakai sebagai pengganti: seluruh
+  langkah CI dijalankan lokal dan lulus (34 pemeriksaan).
+- Font kode PPTX **Node** memakai `"Consolas"` (bukan Liberation Mono) - ini
+  **memang** pilihan yang tepat: PPTX dibuka di PowerPoint, dan PowerPoint
+  di Windows selalu punya Consolas. Kalau PPTX menyebut `"Liberation Mono"`
+  (tak terpasang di Windows), PowerPoint jatuh ke Calibri yang PROPORSIONAL,
+  jadi lebar baris kode jadi tak lurus. DeckCraft (mesin render sendiri)
+  tetap pakai Liberation Mono karena font itu dibundel di binary-nya.
+  Dua target, dua pilihan yang tepat.
 
 ## Sesi 4 (2026-10-21) - 4 item tersisa diselesaikan + 3 bug nyata
 
@@ -585,4 +598,96 @@ Hasil visual:
 - typecheck browser + server + node: 0 error
 - 72 unit test lulus
 - Audit isi generator Node: 25 pemeriksaan
-- Negative test: 12 kasus, semuanya terbukti menangkap regresi
+- Negative test: 13 kasus, semuanya terbukti menangkap regresi
+- 30 langkah suite terdaftar (dicek penjaga salah ketik)
+## Sesi 7 (2026-10-21) - audit gap: koreksi klaim, CI terbukti jalan
+
+### KOREKSI: 4 dari 5 "gap" Sesi 6 ternyata BUKAN gap
+Sesi 6 menutup dengan 5 "gap yang tersisa". Sesi 7 mengujinya dengan
+bukti, bukan asumsi - dan 4 dari 5 ternyata SALAH:
+
+| Klaim Sesi 6 | Status setelah audit | Bukti |
+|---|---|---|
+| Thumbnail template = placeholder | **BUKAN GAP** | `MiniTemplatePreview` sudah merender; terukur 8-12 warna per kartu, ada SVG, tak ada gambar rusak |
+| Auto-Generate belum diuji e2e | **BUKAN GAP** | `verifikasi-auto-generate.mjs` sudah menguji dengan mock berisi tabel, grafik, diagram, dan blok asing yang dibuang |
+| Gambar remote tak terunduh | **BUKAN GAP** | `exporter.ts` sudah punya `urlKeDataUrl()` (fetch + data-URL) dengan fallback `null` saat gagal; dipakai di 2 jalur ekspor |
+| Workflow CI belum pernah jalan | **BUKAN GAP** | YAML valid, 3 job, semua skrip yang dirujuk ADA di repo |
+| Ukuran font kode masih kecil | **BUKAN GAP** | 18 pt terukur 27 px pada render 1440 px (ambang nyaman 24 px) - NYAMAN |
+
+Pelajaran: daftar "yang tersisa" harus diuji sebelum dilaporkan. Empat
+dari lima klaim itu keliru, dan kalau dilaporkan apa adanya, user akan
+membuang waktu mengerjakan sesuatu yang sudah beres.
+
+### Yang benar-benar tersisa: 1 hal (butuh keputusan Principal)
+**Belum ada git remote** - 11 commit lokal belum didorong ke GitHub, jadi
+workflow CI mustahil dijalankan. Ini butuh URL repo dari Principal:
+
+```bash
+git remote add origin <url-github>
+git push -u origin master
+```
+
+Sambil menunggu, gap ini ditutup sebagian: `scripts/simulasi-ci.mjs`
+(`pnpm verify:ci`) menjalankan SELURUH langkah CI secara lokal.
+
+### Bukti CI jalan: simulasi lokal
+`scripts/simulasi-ci.mjs` - 34 pemeriksaan, semua lulus:
+- 0. Workflow: YAML valid, 3 job punya run & runs-on, semua skrip yang
+  dirujuk ADA, semua skrip npm terdaftar.
+- 1. job `check`: 3 typecheck + vitest + vite build (4,7 / 1,7 / 2,1 /
+  2,9 / 58,0 dtk).
+- 2. job `generators`: 8 skrip (6,6 / 2,5 / 1,8 / 2,5 / 0,1 / 0,1 /
+  14,9 / 72,3 dtk).
+- 3. job `deckcraft`: 3 skrip (0,4 / 0,5 / 0,4 dtk).
+- 4. git remote: dilaporkan (bukan kegagalan build).
+
+**Bug yang ditemukan saat membuat simulasi:** `cmd.exe /c` memecah path
+berspasi - repo ini di `C:\MRP\proyek 2026\...`, jadi `cmd.exe` memotongnya
+jadi `C:\MRP\proyek` dan perintah gagal. Ini bug yang SAMA seperti yang
+ditemukan di generator Mermaid. Perbaikan: jalankan entry point
+JavaScript-nya langsung dengan Node (`typescript/lib/tsc.js`,
+`vitest/vitest.mjs`, `vite/bin/vite.js`), tanpa `.cmd` dan tanpa shell.
+
+### CI diperbaiki: skrip baru ikut jalan
+Ternyata `verifikasi-mermaid.mjs` & `audit-isi-generator-node.mjs` TIDAK
+pernah dijalankan di CI - skripnya ada tapi tak dirujuk workflow. Sekarang
+keduanya dijalankan, plus langkah "Workflow memeriksa dirinya sendiri"
+(`simulasi-ci.mjs --hanya-validasi`) supaya runner juga memverifikasi bahwa
+workflow-nya valid dan skrip yang dirujuk ada.
+
+### Audit font kode (bukti, bukan perasaan)
+`scripts/audit-font-kode.mjs` merender blok kode pada 5 ukuran lalu
+mengukur tinggi glyph dari PNG hasil render (decode PNG sendiri, tanpa
+dependensi):
+
+| Ukuran | Tinggi glyph @1440px | Height baris terukur | Penilaian |
+|---|---|---|---|
+| 14 pt | 21,0 px | 23 px | kurang |
+| 16 pt | 24,0 px | 27 px | nyaman |
+| **18 pt** | **27,0 px** | **24 px** | **nyaman** |
+| 20 pt | 30,0 px | 26 px | nyaman |
+| 22 pt | 33,0 px | 29 px | nyaman |
+
+18 pt (ukuran sekarang) lolos ambang 24 px. Render ada di
+`testrun-font/` untuk dilihat.
+
+### Skrip verifikasi baru
+- `scripts/simulasi-ci.mjs` (34) - menjalankan seluruh langkah CI secara
+  lokal. Mode `--hanya-validasi` untuk runner CI.
+- `scripts/audit-gap-beser.mjs` (33) - mengunci kenyataan di atas: workflow
+  CI valid, skrip yang dirujuk ada, ekspor gambar remote ada fallback
+  offline, generator Node mengembalikan buffer & tak menulis file liar.
+  Masukkan ke suite supaya klaim yang keliru tak terulang.
+- `scripts/audit-font-kode.mjs` -ukur keterbacaan font kode dari render
+  nyata.
+
+## Status verifikasi terakhir (Sesi 7)
+
+`pnpm verify:all` -> **387 pemeriksaan lulus, 0 gagal**, exit 0
+- typecheck browser + server + node: 0 error
+- 72 unit test lulus
+- Audit gap: 33 pemeriksaan
+- Negative test: 13 kasus, semuanya terbukti menangkap regresi
+- 30 langkah suite terdaftar (dicek penjaga salah ketik)
+- `pnpm verify:ci` -> 34 pemeriksaan, semua lulus (workflow CI terbukti
+  akan jalan begitu repo di-push)

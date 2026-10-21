@@ -39,7 +39,10 @@
     "sync:deploy": "powershell -ExecutionPolicy Bypass -File scripts/sync-deploy.ps1",
     "verify:mermaid": "node scripts/verifikasi-mermaid.mjs",
     "pasang:mermaid": "powershell -ExecutionPolicy Bypass -File scripts/pasang-mermaid.ps1",
-    "audit:isi-node": "node scripts/audit-isi-generator-node.mjs"
+    "audit:isi-node": "node scripts/audit-isi-generator-node.mjs",
+    "verify:ci": "node scripts/simulasi-ci.mjs",
+    "audit:gap": "node scripts/audit-gap-beser.mjs",
+    "audit:font-kode": "node scripts/audit-font-kode.mjs"
   },
   "dependencies": {
     "docx": "^9.10.0",

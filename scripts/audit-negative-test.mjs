@@ -243,6 +243,37 @@ ujiRegresi(
   "scripts/audit-isi-generator-node.mjs",
 );
 
+// --- O. Penjaga salah ketik di suite: "Jalarkan" bukan "Jalankan" ---
+// Efeknya: satu langkah suite dieksekusi sebagai perintah yang tak dikenal,
+// dan karena `$ErrorActionPreference = "Continue"`, suite tetap exit 0
+// padahal langkah itu TAK PERNAH jalan. Guard di verifikasi-semua.ps1
+// harus menangkapnya.
+{
+  const file = path.join(AKAR, "scripts", "verifikasi-semua.ps1");
+  const asli = readFileSync(file, "utf8");
+  const rusak = asli.replace(
+    'Jalankan "Typecheck (browser)"',
+    'Jalarkan "Typecheck (browser)"',
+  );
+  if (rusak === asli) {
+    cek("O. Penjaga salah ketik: transformasi tak mengubah berkas", false);
+  } else {
+    writeFileSync(file, rusak, "utf8");
+    try {
+      const hasil = jalankanSkrip("scripts/verifikasi-semua.ps1");
+      cek(
+        "O. Penjaga salah ketik di suite menangkap typo",
+        hasil.kode !== 0,
+        `exit ${hasil.kode}`,
+      );
+      const pesan = hasil.keluar.split("\n").find((l) => l.includes("ERROR"));
+      if (pesan) console.log(`         ${pesan.trim()}`);
+    } finally {
+      writeFileSync(file, asli, "utf8");
+    }
+  }
+}
+
 // --- Sanity: setelah semua dibalik, skrip harus lulus lagi ---
 const akhir = jalankanSkrip();
 cek(

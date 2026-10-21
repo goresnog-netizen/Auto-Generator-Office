@@ -36,6 +36,9 @@ testrun/
 
 # Log sementara dari skrip verifikasi.
 *.log
+testrun-gap/
+testrun-font/
+testrun-audit-gap/
 
 # Konfigurasi Puppeteer: berisi path Chrome milik MESIN INI, jadi tak
 # boleh di-commit. Di-regenerate oleh `pnpm pasang:mermaid`.
@@ -76,6 +79,9 @@ scripts/*
 !scripts/testrun-ekspor.mjs
 !scripts/testrun-audit.mjs
 !scripts/testrun-isi.mjs
+!scripts/simulasi-ci.mjs
+!scripts/audit-gap-beser.mjs
+!scripts/audit-font-kode.mjs
 !scripts/pasang-mermaid.ps1
 !scripts/zip-util.mjs
 !scripts/perbaiki-encoding.ps1

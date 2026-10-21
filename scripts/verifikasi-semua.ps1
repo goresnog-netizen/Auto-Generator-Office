@@ -11,6 +11,24 @@ $akar = Split-Path -Parent $PSScriptRoot
 Set-Location $akar
 
 $hasil = @()
+
+# Penjaga: salah ketik nama fungsi ("Jalarkan" vs "Jalankan") membuat satu
+# baris dieksekusi sebagai perintah yang tak dikenal - dan karena
+# `$ErrorActionPreference = "Continue"`, suite tetap exit 0 padahal skrip itu
+# TAK PERNAH jalan. Ini kelas bug paling berbahaya: pemeriksaan yang tak
+# dijalankan tapi dilaporkan hijau. Sesi 6 mengalami ini (skrip audit baru
+# tak pernah jalan selama beberapa sesi). Jadi dijaga di sini.
+$isiSkrip = Get-Content $PSCommandPath
+$typo = @($isiSkrip | Where-Object { $_ -match '^\s*Jalarkan\s' -or $_ -match '^\s*Jalrun\s' })
+if ($typo.Count -gt 0) {
+  Write-Host "ERROR: salah ketik nama fungsi di baris:" -ForegroundColor Red
+  $typo | ForEach-Object { Write-Host "       $_" -ForegroundColor Red }
+  Write-Host "       (harus 'Jalankan', bukan 'Jalarkan')" -ForegroundColor Red
+  exit 1
+}
+$jumlahLangkah = @($isiSkrip | Where-Object { $_ -match '^\s*Jalankan\s+"' }).Count
+Write-Host "$jumlahLangkah langkah suite terdaftar." -ForegroundColor DarkGray
+
 function Jalankan($nama, $perintah, $argumen) {
   Write-Host ""
   Write-Host "=== $nama ===" -ForegroundColor Cyan
@@ -48,11 +66,13 @@ Jalankan "Typecheck (node)" "npx" @("tsc", "--noEmit", "-p", "tsconfig.node.json
 Jalankan "Unit test" "npx" @("vitest", "run", "--reporter=dot")
 Jalankan "Bridge DeckCraft (Node)" "node" @("scripts/verify-deckcraft.mts")
 Jalankan "Kode monospace di DeckCraft" "node" @("--experimental-strip-types", "scripts/verifikasi-kode-deckcraft.mts")
+Jalankan "Keterbacaan font kode (ukur dari render)" "node" @("scripts/audit-font-kode.mjs")
 Jalankan "Fitur DeckCraft baru (font, filmstrip, ekspor)" "node" @("scripts/verifikasi-fitur-deckcraft.mjs")
 Jalankan "Generator Node (tulis file nyata)" "node" @("scripts/verifikasi-generators.mjs")
 Jalankan "Mermaid (render SVG nyata)" "node" @("scripts/verifikasi-mermaid.mjs")
 Jalankan "Audit isi generator (konten bermakna)" "node" @("scripts/audit-isi-generator.mjs")
 Jalankan "Audit isi generator Node (buffer, mono, chart)" "node" @("scripts/audit-isi-generator-node.mjs")
+Jalankan "Audit gap (klaim lama + kebenaran CI)" "node" @("scripts/audit-gap-beser.mjs")
 Jalankan "Gambar tertanam di PDF" "node" @("scripts/verifikasi-pdf-gambar.mjs")
 Jalankan "Fitur baru (CI, undo, pesan, diagram)" "node" @("scripts/verifikasi-fitur-baru.mjs")
 Jalankan "Negative test (skrip tangkap regresi)" "node" @("scripts/audit-negative-test.mjs")

@@ -87,8 +87,20 @@ jobs:
       - name: Verifikasi fitur DeckCraft (font kode, filmstrip, ekspor)
         run: node scripts/verifikasi-fitur-deckcraft.mjs
 
+      - name: Audit isi generator Node (buffer, mono, chart)
+        run: node scripts/audit-isi-generator-node.mjs
+
+      - name: Mermaid benar-benar ter-render (bukan fallback .mmd)
+        run: node scripts/verifikasi-mermaid.mjs
+
       - name: Negative test (skrip menangkap regresi)
         run: node scripts/audit-negative-test.mjs
+
+      # Workflow memeriksa dirinya sendiri: YAML valid, semua skrip yang
+      # dirujuk ada, semua skrip npm terdaftar. Jadi workflow yang rusak
+      # (skrip hilang / nama salah) ketahuan di runner yang sama.
+      - name: Workflow memeriksa dirinya sendiri
+        run: node scripts/simulasi-ci.mjs --hanya-validasi
 
   # Perintah DeckCraft dibandingkan dengan engine asli. Butuh binary
   # DeckCraft, jadi khusus runner Windows (binary rilis hanya Windows/Linux
