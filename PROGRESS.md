@@ -205,8 +205,10 @@ Hasil per generator:
 - Vercel tak bisa menjalankan API DeckCraft (panel menampilkan "Tidak
   tersedia" + panduan `pnpm serve`/host ber-Node). Ini batasan platform,
   bukan bug - DeckCraft adalah program native Rust.
-- Diagram butuh mermaid-cli + Chrome; tanpa itu jatuh ke fallback `.mmd`
-  (sekarang pesannya menyebut butir yang kurang secara spesifik).
+- ~~Diagram butuh mermaid-cli + Chrome; tanpa itu jatuh ke fallback `.mmd`
+  (sekarang pesannya menyebut butir yang kurang secara spesifik).~~ ->
+  **SELESAI** (Sesi 5): `pnpm pasang:mermaid` memasang mermaid-cli + mendeteksi
+  Chrome; render SVG nyata sudah terbukti.
 - DeckCraft Studio belum ada di mirror `Deploy Github/` (memang disengaja -
   butuh server Node), tapi panelnya sendiri sudah di-source utama.
 
@@ -430,3 +432,80 @@ Yang bisa diverifikasi: jumlah layer blur, luas area tercakup blur, animasi
 aurora hidup (transform berubah), kontras WCAG dihitung dengan
 mengomposisi leluhur background, dan - lewat negative test - bahwa
 skrip verifikasi benar-benar menangkap regresi saat bug dibalik.
+
+## Sesi 5 (2026-10-21) - Mermaid + Chrome terpasang, font kode diganti
+
+### 1. Instalasi mermaid-cli + Chrome (aman)
+- `scripts/pasang-mermaid.ps1` (script npm: `pnpm pasang:mermaid`):
+  1. cek Node >= 22.13.0 (syarat mermaid-cli 12) - gagal cepat dengan pesan jelas;
+  2. cari Chrome di 4 lokasi standar (Program Files, x86, LOCALAPPDATA,
+     Chromium);
+  3. pasang `@mermaid-js/mermaid-cli@12.0.0` + `puppeteer@25.15.0` sebagai
+     **devDependency lokal** dengan `PUPPETEER_SKIP_DOWNLOAD=1` -> Chromium
+     (~200 MB) TIDAK pernah terunduh saat instalasi lokal;
+  4. tulis `config/puppeteer.config.json` (headless, `--no-sandbox`,
+     `executablePath` ke Chrome mesin ini) - **tanpa BOM**;
+  5. uji render nyata (flowchart -> SVG berisi node). Kalau gagal, skrip
+     berhenti dengan pesan - bukan diam-diam "berhasil".
+- `config/puppeteer.config.json` **tak di-commit** (path spesifik mesin),
+  di-regenerate installer.
+- `pnpm-workspace.yaml`: build script `puppeteer` diizinkan, karena runner
+  Linux CI tak punya Chrome dan butuh Chrome for Testing milik Puppeteer.
+
+### 2. Generator diagram - 4 bug nyata ditemukan
+- **`cmd.exe /c` memecah path berspasi.** Repo ini ada di
+  `C:\MRP\proyek 2026\NitZ-909`; memanggil `mmdc.cmd` lewat `cmd.exe /c`
+  memotongnya jadi `C:\MRP\proyek` dan perintah gagal. Perbaikan: `mmdc`
+  hanyalah wrapper yang memanggil `src/cli.js` dengan Node - jadi modul
+  memanggil `cli.js` **langsung**, tanpa `.cmd`, tanpa shell.
+- **`import.meta.url` + `path.resolve` salah akar.** Akar proyek tak bisa
+  dihitung dari `import.meta.url` saja, karena modul ini dimuat dari
+  `src/generators/`, dari `node_modules/.cache/` (bundle esbuild), atau dari
+  `dist/`. Perbaikan: `fileURLToPath` + beberapa kandidat lokasi.
+- **Berkas keluaran tak divalidasi.** `readFile(outputAbs)` bisa membaca
+  berkas lain (mis. sumber `.mmd`) lalu dilaporkan "sukses" padahal tak ada
+  render. Perbaikan: cek berkas keluar benar-benar ada DAN diawali `<svg`.
+- **`generate()` membuang `metadata`.** Efeknya: pesan fallback ("Chrome
+  tidak ditemukan" / "sintaks Mermaid salah") hilang total - user cuma
+  melihat diagram gagal tanpa tahu apa yang kurang. Perbaikan: metadata
+  digabung & diteruskan. Negative test kasus J menjaga hal ini.
+- Fallback kini membedakan 3 sebab: mermaid-cli tak ada / Chrome tak ada /
+  sintaks Mermaid salah.
+
+### 3. Font kode: "Consolas" -> "Liberation Mono"
+Alasan (hasil uji, bukan selera):
+- **Lisensi**: Liberation Mono = SIL OFL dan DIBUNDEL di binary DeckCraft.
+  Consolas = font Microsoft, dan DeckCraft sendiri melarang aset Microsoft.
+- **Konsistensi**: Liberation Mono selalu ada -> hasil render sama di
+  semua mesin. Consolas cuma di Windows.
+- **Terbukti dirender, bukan fallback**: dibuktikan dengan membandingkan
+  hash PNG render. Hasil:
+  - Liberation Mono -> hash **beda** dari font tak_unknown (fallback)
+  - Consolas -> hash beda juga (ada di mesin ini)
+  - DejaVu Sans Mono, JetBrains Mono, Fira Code, Source Code Pro ->
+    hash **SAMA** dengan font tak dikenal = FALLBACK, tak benar-benar
+    dirender.
+  - "Liberation Mono" ternyata **tidak** ada di daftar font Windows tapi
+    tetap dirender - karena dibundel di dalam binary DeckCraft.
+- Verifikasi ini kini jadi bagian `scripts/verifikasi-kode-deckcraft.mts`:
+  render `FONT_KODE` dibandingkan dengan render font tak dikenal; hashnya
+  harus beda.
+
+### 4. Skrip & negative test
+- `scripts/verifikasi-mermaid.mjs` (20 pemeriksaan) - instalasi, konfigurasi
+  Puppeteer, flowchart/sequence/pie ter-render, generator mengembalikan SVG
+  nyata, sintaks salah -> pesan yang tepat.
+- Negative test naik 9 -> **10** kasus (tambah: J = metadata fallback Mermaid
+  dibuang).
+- Negative test H (blok kode tanpa font) diperbaiki: regex-nya terlalu
+  ketat dan gagal saat format kode berubah. Sekarang longgar (spasi
+  fleksibel).
+
+## Status verifikasi terakhir (Sesi 5)
+
+`pnpm verify:all` -> **329 pemeriksaan lulus, 0 gagal**, exit 0
+- typecheck browser + server + node: 0 error
+- 69 unit test lulus
+- Mermaid: 20 pemeriksaan (3 jenis diagram ter-render beneran)
+- Negative test: 10 kasus, semuanya terbukti menangkap regresi
+- Detail: `docs/DIAGRAM-MERMAID.md`

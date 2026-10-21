@@ -169,7 +169,9 @@ ujiRegresi(
   path.join(AKAR, "src", "lib", "deckcraft-ppt.ts"),
   (s) =>
     s.replace(
-      /    slideBaru\.push\(\{\n      command: "format\.font",\n      params: \{ family: FONT_KODE \},\n    \}\);\n/,
+      // Pattern dibuat longgar (spasi fleksibel) supaya tak ikut rapuh
+      // kalau format indentasi berkode berubah.
+      /slideBaru\.push\(\{\s*command: "format\.font",\s*params: \{ family: FONT_KODE \},\s*\}\);\s*/,
       "",
     ),
   true,
@@ -197,6 +199,21 @@ ujiRegresi(
   }
 }
 
+// --- J. Generator diagram: metadata fallback dibuang ---
+// Efeknya: pesan "Chrome tidak ditemukan" / "sintaks Mermaid salah"
+// hilang total - user cuma melihat diagram gagal tanpa tahu apa yang kurang.
+ujiRegresi(
+  "J. Generator diagram buang metadata fallback",
+  path.join(AKAR, "src", "generators", "diagram.ts"),
+  (s) =>
+    // Buang peny-spread metadata: kalau metadata tak diteruskan ke hasil
+    // akhir, pesan fallback hilang. Pattern longgar supaya tahan perubahan
+    // format.
+    s.replace(/\s*\.\.\.\(Object\.keys\(metadataGabung\)\.length > 0[\s\S]{0,120}?:\s*\{\}\),/, ""),
+  true,
+  "scripts/verifikasi-mermaid.mjs",
+);
+
 // --- Sanity: setelah semua dibalik, skrip harus lulus lagi ---
 const akhir = jalankanSkrip();
 cek(
@@ -214,9 +231,16 @@ cek(
 
 const akhirDeckcraft = jalankanSkrip("scripts/verifikasi-fitur-deckcraft.mjs");
 cek(
-  "I. Setelah semua bug dikembalikan, skrip fitur DeckCraft lulus lagi",
+  "K. Setelah semua bug dikembalikan, skrip fitur DeckCraft lulus lagi",
   akhirDeckcraft.kode === 0,
   `exit ${akhirDeckcraft.kode}`,
+);
+
+const akhirMermaid = jalankanSkrip("scripts/verifikasi-mermaid.mjs");
+cek(
+  "L. Setelah semua bug dikembalikan, skrip Mermaid lulus lagi",
+  akhirMermaid.kode === 0,
+  `exit ${akhirMermaid.kode}`,
 );
 
 console.log("\nSelesai.");

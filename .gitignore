@@ -32,6 +32,11 @@ probe-*.mjs
 .devserver.log
 .devserver.err
 
+# Konfigurasi Puppeteer: berisi path Chrome milik MESIN INI, jadi tak
+# boleh di-commit. Di-regenerate oleh `pnpm pasang:mermaid`.
+# Di CI tak ada file ini - Puppeteer memakai Chrome for Testing miliknya.
+config/puppeteer.config.json
+
 # Temp scripts & dumps (local working files)
 scripts/*
 !scripts/build-release.ps1
@@ -60,6 +65,8 @@ scripts/*
 !scripts/verifikasi-kode-deckcraft.mts
 !scripts/verifikasi-api-filmstrip.mjs
 !scripts/verifikasi-ui-filmstrip.mjs
+!scripts/verifikasi-mermaid.mjs
+!scripts/pasang-mermaid.ps1
 !scripts/zip-util.mjs
 !scripts/perbaiki-encoding.ps1
 !scripts/audit-isi-generator.mjs

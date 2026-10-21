@@ -17,6 +17,7 @@ import {
 import { promisify } from 'util';
 import { execFile } from 'child_process';
 import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 // Semua perintah eksternal dijalankan lewat `execFile` (tanpa shell),
@@ -25,17 +26,114 @@ import path from 'node:path';
 const execFileAsync = promisify(execFile);
 
 /**
- * Cari npx yang bisa dijalankan tanpa shell.
+ * Lokasi paket Node yang bisa dipakai untuk cari `mmdc`.
  *
- * Di Windows, `npx` adalah berkas `.cmd` (batch). `execFile` tanpa shell
- * tak bisa menjalankan batch file - Node menolak extension .cmd/.bat demi
- * keamanan (CVE-2024-27980). Solusinya: jalankan `npx-cli.js` langsung
- * dengan Node, tanpa shell sama sekali.
+ * Di repo ini, `@mermaid-js/mermaid-cli` adalah devDependency LOKAL
+ * (dipasang `scripts/pasang-mermaid.ps1`), jadi binary-nya ada di
+ * `node_modules/`. Ini lebih aman daripada `npx -y` yang mengunduh
+ * paket dari jaringan setiap kali render.
  *
- * @returns perintah + awalan argumen, atau null bila npx tak ditemukan.
+ * CATATAN - dua jebakan yang sudah ditangani:
+ *
+ *  1. Pakai `fileURLToPath`, bukan `new URL(...).pathname` langsung.
+ *     `pathname` mengembalikan URL dengan percent-encoding yang belum
+ *     di-decode, dan di Windows meninggalkan awalan `/C:/...`.
+ *
+ *  2. Akar proyek TIDAK bisa dihitung dari `import.meta.url` saja.
+ *     Berkas ini bisa dimuat dari beberapa tempat: sumber langsung
+ *     (`src/generators/`), hasil bundle esbuild di `node_modules/.cache/`,
+ *     atau build produksi. Masing-masing menghasilkan akar yang berbeda,
+ *     jadi `AKAR_PROYEK` di bawah hanya dipakai sebagai salah satu
+ *     kandidat - pencarian `cli.js` mencoba beberapa lokasi.
  */
-function cariNpx(): { cmd: string; awalan: string[] } | null {
-  // 1. npx-cli.js di sebelah node.exe (layout instalasi Node standar).
+const AKAR_PROYEK = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+);
+
+/**
+ * Path konfigurasi Puppeteer (ditulis oleh scripts/pasang-mermaid.ps1).
+ *
+ * Diambil dari kandidat pertama yang benar-benar ada, karena lokasi
+ * berkasnya berbeda tergantung dari mana modul ini dimuat.
+ */
+function cariPathPuppeteerConfig(): string | null {
+  const kandidat = [
+    path.join(AKAR_PROYEK, 'config', 'puppeteer.config.json'),
+    path.resolve(AKAR_PROYEK, '..', '..', 'config', 'puppeteer.config.json'),
+    path.resolve(AKAR_PROYEK, '..', '..', '..', 'config', 'puppeteer.config.json'),
+    path.join(process.cwd(), 'config', 'puppeteer.config.json'),
+  ];
+  for (const k of [...new Set(kandidat)]) {
+    if (existsSync(k)) return k;
+  }
+  return null;
+}
+
+/**
+ * Kandidat lokasi `mermaid-cli/src/cli.js`.
+ *
+ * Diuji berurutan; yang pertama ada yang dipakai. Alasan banyak kandidat:
+ * berkas ini dimuat dari `src/generators/` saat dev, dari
+ * `node_modules/.cache/` saat di-bundle skrip verifikasi, dan dari
+ * `dist/` saat build produksi - masing-masing dengan kedalaman folder
+ * berbeda.
+ */
+function kandidatCliMmdc(): string[] {
+  const kandidat: string[] = [];
+  const tambah = (akar: string) => {
+    if (!akar) return;
+    kandidat.push(
+      path.join(akar, 'node_modules', '@mermaid-js', 'mermaid-cli', 'src', 'cli.js'),
+    );
+  };
+  // Sumber langsung: src/generators/ -> akar proyek.
+  tambah(path.resolve(AKAR_PROYEK));
+  // Bundle di node_modules/.cache/<x>/ -> akar proyek.
+  tambah(path.resolve(AKAR_PROYEK, '..', '..'));
+  // Build produksi (dist/assets/).
+  tambah(path.resolve(AKAR_PROYEK, '..', '..', '..'));
+  // Akar proses (cwd saat skrip dijalankan).
+  tambah(process.cwd());
+  return [...new Set(kandidat)];
+}
+
+/**
+ * Cari binary `mmdc` yang bisa dijalankan tanpa shell.
+ *
+ * Di Windows, `node_modules/.bin/mmdc.cmd` adalah BATCH FILE. Node menolak
+ * extension .cmd/.bat lewat `execFile` tanpa shell demi keamanan
+ * (CVE-2024-27980), dan memanggilnya lewat `cmd.exe /c` berbahaya: path
+ * yang mengandung spasi ("C:\MRP\proyek 2026\...") dipecah jadi argumen
+ * terpisah dan perintah gagal.
+ *
+ * Karena itu skrip ini TIDAK memakai file .cmd sama sekali. `mmdc` hanyalah
+ * wrapper yang memanggil `src/cli.js` dengan Node - jadi kita panggil
+ * `cli.js` itu langsung:
+ *
+ *   1. `node_modules/@mermaid-js/mermaid-cli/src/cli.js` (instalasi lokal)
+ *   2. `mmdc` di PATH sebagai executable native (Linux/macOS)
+ *   3. `npx` + `npx-cli.js` (fallback; mengunduh paket, jadi lambat)
+ *
+ * Semua tanpa shell: argumen tetap array, tak ada interpolasi.
+ *
+ * @returns perintah + awalan argumen, atau null bila tak ada yang bisa dipakai.
+ */
+function cariMmdc(): { cmd: string; awalan: string[] } | null {
+  // 1. Instalasi lokal: jalankan cli.js langsung dengan Node.
+  for (const kandidat of kandidatCliMmdc()) {
+    if (existsSync(kandidat)) {
+      return { cmd: process.execPath, awalan: [kandidat] };
+    }
+  }
+
+  // 2. mmdc di PATH sebagai executable native (Linux/macOS).
+  if (process.platform !== 'win32') {
+    return { cmd: 'mmdc', awalan: [] };
+  }
+
+  // 3. Fallback: npx-cli.js di sebelah node.exe.
   const besideNode = path.join(
     path.dirname(process.execPath),
     'node_modules',
@@ -44,18 +142,14 @@ function cariNpx(): { cmd: string; awalan: string[] } | null {
     'npx-cli.js',
   );
   if (existsSync(besideNode)) {
-    return { cmd: process.execPath, awalan: [besideNode] };
+    return {
+      cmd: process.execPath,
+      awalan: [besideNode, '-y', '@mermaid-js/mermaid-cli'],
+    };
   }
 
-  // 2. npx di PATH sebagai executable native (Linux/macOS).
-  if (process.platform !== 'win32') {
-    return { cmd: 'npx', awalan: [] };
-  }
-
-  // 3. Fallback terakhir di Windows: .cmd butuh shell. Hanya dipakai
-  //    kalau npx-cli.js tak ditemukan, dan argumennya tetap array
-  //    (bukan string) sehingga tak ada interpolasi shell.
-  return { cmd: 'npx.cmd', awalan: [] };
+  // 4. Fallback terakhir: npx.cmd (butuh shell, argumen tetap array).
+  return { cmd: 'npx.cmd', awalan: ['-y', '@mermaid-js/mermaid-cli'] };
 }
 
 export interface DiagramGeneratorOptions extends Omit<GeneratorOptions, 'theme'> {
@@ -115,13 +209,25 @@ export class DiagramGenerator implements DocumentGenerator {
         results.push(result);
       }
 
-      // Return combined result
+      // Return combined result.
+      //
+      // CATATAN: metadata dari hasil per-blok HARUS diteruskan. Sebelumnya
+      // metadata dibuang di sini, sehingga pesan fallback (mis. "Chrome tidak
+      // ditemukan" atau "sintaks Mermaid salah") hilang total - user cuma
+      // melihat diagram gagal tanpa tahu apa yang kurang.
       const allSuccess = results.every(r => r.success);
+      const metadataGabung = results
+        .map(r => r.metadata)
+        .filter((m): m is NonNullable<typeof m> => !!m)
+        .reduce<Record<string, unknown>>((acc, m) => ({ ...acc, ...m }), {});
       return {
         success: allSuccess,
         outputPath: this.options.outputPath,
         buffer: results[0]?.buffer,
-        error: allSuccess ? undefined : results.find(r => !r.success)?.error
+        error: allSuccess ? undefined : results.find(r => !r.success)?.error,
+        ...(Object.keys(metadataGabung).length > 0
+          ? { metadata: metadataGabung }
+          : {}),
       };
     } catch (error) {
       return {
@@ -243,47 +349,75 @@ export class DiagramGenerator implements DocumentGenerator {
     // menyuntik perintah lain.
     try {
       const theme = this.options.theme === 'dark' ? 'dark' : 'default';
-      const npx = cariNpx();
-      if (!npx) {
-        throw new Error('npx tidak ditemukan di sistem.');
+      const mmdc = cariMmdc();
+      if (!mmdc) {
+        throw new Error('mermaid-cli tidak ditemukan di sistem.');
       }
       const args = [
-        ...npx.awalan,
-        '-y',
-        '@mermaid-js/mermaid-cli',
+        ...mmdc.awalan,
         '-i', mmdAbs,
         '-o', outputAbs,
         '-t', theme,
         '-b', this.options.backgroundColor || 'transparent',
       ];
+      // Konfigurasi Puppeteer: menunjuk Chrome yang terpasang di mesin ini
+      // dan menambahkan --no-sandbox (wajib di banyak CI).
+      const configPuppeteer = cariPathPuppeteerConfig();
+      if (configPuppeteer) {
+        args.push('-p', configPuppeteer);
+      }
       if (this.options.width) args.push('-w', String(this.options.width));
       if (this.options.height) args.push('-H', String(this.options.height));
 
-      await execFileAsync(npx.cmd, args, { cwd: dir });
+      await execFileAsync(mmdc.cmd, args, { cwd: dir });
 
+      // Validasi hasil: berkas keluaran WAJIB ada dan berisi SVG. Tanpa
+      // cek ini, `readFile` bisa saja membaca berkas lain (mis. sumber
+      // .mmd) dan hasilnya dilaporkan "sukses" padahal tak ada render.
+      if (!existsSync(outputAbs)) {
+        throw new Error(
+          'mermaid-cli selesai tanpa menulis berkas keluaran: ' + outputAbs,
+        );
+      }
       const buffer = await fs.promises.readFile(outputAbs);
+      const kepala = buffer.subarray(0, 512).toString('utf8');
+      if (!kepala.includes('<svg')) {
+        throw new Error(
+          'berkas keluaran bukan SVG (mungkin diagram gagal di-parse): ' +
+            outputAbs,
+        );
+      }
       return { success: true, outputPath, buffer };
     } catch (error) {
       // Fallback: return mermaid source.
       //
-      // Dua sebab yang berbeda dan perlu dibedakan user:
-      //  1. mermaid-cli tak terpasang / gagal — sumber .mmd dikembalikan;
-      //  2. mermaid-cli jalan TAPI Chrome/headless tak ada — error-nya
-      //     khas ("Could not find Chrome", "browser was not found").
-      //     Di kasus ini sumber .mmd tetap dikembalikan, tapi pesannya
-      //     menyebut kebutuhan Chrome supaya user tahu apa yang kurang.
+      // Tiga sebab yang berbeda dan perlu dibedakan user:
+      //  1. mermaid-cli tak terpasang → sumber .mmd dikembalikan;
+      //  2. mermaid-cli jalan TAPI Chrome/headless tak ada → pesan menyebut
+      //     kebutuhan Chrome;
+      //  3. mermaid-cli jalan, Chrome jalan, tapi diagramnya sendiri
+      //     salah sintaks → pesan menyebut kesalahan Mermaid.
       const pesanError =
         error instanceof Error ? error.message : String(error);
       const butuhChrome =
-        /could not find chrome|browser was not found|chromium is not installed|chrome.*not found/i.test(
+        /could not find chrome|browser was not found|chromium is not installed|chrome.*not found|failed to launch the browser process/i.test(
+          pesanError,
+        );
+      const salahSintaks =
+        /parse error|lexing error|no diagram type detected|unknowndiagramerror|error parsing/i.test(
           pesanError,
         );
       const pesan = butuhChrome
         ? 'Mermaid CLI berjalan tetapi Chrome/Chromium tidak ditemukan. ' +
-          'Pasang Chrome (atau set PUPPETEER_EXECUTABLE_PATH) lalu ulangi. ' +
+          'Jalankan `pnpm pasang:mermaid` (mencari Chrome yang terpasang) ' +
+          'atau set PUPPETEER_EXECUTABLE_PATH. ' +
           'Sementara itu sumber Mermaid dikembalikan sebagai .mmd.'
-        : 'Mermaid CLI tidak tersedia atau gagal. Sumber Mermaid dikembalikan sebagai .mmd. ' +
-          'Pasang @mermaid-js/mermaid-cli (npm i -g @mermaid-js/mermaid-cli) untuk render SVG.';
+        : salahSintaks
+          ? 'Mermaid CLI berjalan, tapi diagramnya gagal di-parse. ' +
+            'Periksa sintaks Mermaid. ' +
+            'Sementara itu sumber Mermaid dikembalikan sebagai .mmd.'
+          : 'Mermaid CLI tidak tersedia atau gagal. Sumber Mermaid dikembalikan sebagai .mmd. ' +
+            'Jalankan `pnpm pasang:mermaid` untuk memasang mermaid-cli + Chrome.';
       return {
         success: true,
         outputPath: mmdAbs,
@@ -291,6 +425,7 @@ export class DiagramGenerator implements DocumentGenerator {
         metadata: {
           fallback: true,
           butuhChrome,
+          salahSintaks,
           message: pesan,
           // Detail teknis disimpan terpisah supaya pesan user tetap ringkas.
           detail: pesanError.slice(0, 500),

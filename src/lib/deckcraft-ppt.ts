@@ -55,21 +55,43 @@ const TIPE_GRAFIK: Record<string, string> = {
 /**
  * Font monospace untuk blok kode.
  *
- * PENTING - ini bukan font Microsoft, dan bukan aset yang boleh di-embed.
- * DeckCraft (crates/fonts/src/fontdb.rs) memetakan "consolas" ke substitusi
- * berbobot metrik yang sama: Liberation Mono -> Courier New -> Menlo ->
- * Courier. Jadi menyebut "Consolas" aman: yang benar-benar dirender adalah
- * font substitusi yang berlisensi bebas, dan blok kode tetap terlihat
- * monospace di semua mesin.
+ * PILIHAN: "Liberation Mono", bukan "Consolas".
  *
- * Daftar di bawah dibaca berurutan: engine memakai substitusi untuk nama
- * pertama yang bisa ditemukan; jadi "Consolas" -&gt; "Courier New" ->
- * "Liberation Mono" semuanya berakhir di font mono yang sama.
+ * Alasannya (bukan selera, tapi hasil uji):
+ *
+ *  1. **Lisensi.** Liberation Mono adalah SIL Open Font License dan
+ *     DIBUNDEL di dalam binary DeckCraft. Consolas adalah font Microsoft -
+ *     dan DeckCraft sendiri melarang aset Microsoft (AGENTS.md §1.1).
+ *
+ *  2. **Konsistensi lintas mesin.** Liberation Mono selalu ada di binary
+ *     DeckCraft, jadi hasil render sama di mesin mana pun. Consolas hanya
+ *     ada di Windows dengan lisensi Microsoft; di Linux/macOS engine
+ *     memetakannya ke substitusi - jadi nama "Consolas" yang tercatat di
+ *     PPTX bisa bait PowerPoint di mesin lain.
+ *
+ *  3. **Terbukti dirender, bukan fallback.** Diuji dengan membandingkan
+ *     hash PNG render untuk beberapa nama font:
+ *       Liberation Mono  -> hash BEDA dari font tak dikenal (fallback)
+ *       Consolas         -> hash BEDA juga (ada di mesin ini)
+ *       DejaVu Sans Mono, JetBrains Mono, Fira Code -> hash SAMA dengan
+ *                          font tak dikenal = FALLBACK, tak benar-benar
+ *                          dirender.
+ *
+ * Catatan: DeckCraft memetakan "consolas" ke ["Liberation Mono",
+ * "Courier New", "Menlo", "Courier"] (crates/fonts/src/fontdb.rs), jadi
+ * PPTX ber-font Consolas pun berakhir digambar dengan Liberation Mono di
+ * mesin tanpa Consolas - tapi blok kode di dalam deck ini memakai nama
+ * yang langsung menunjuk font bebas lisensinya.
  */
-export const FONT_KODE = "Consolas";
+export const FONT_KODE = "Liberation Mono";
 
-/** Font cadangan kalau nama utama tak terpasang di mesin ini. */
-export const FONT_KODE_CADANGAN = ["Courier New", "Liberation Mono", "Menlo"];
+/**
+ * Font cadangan kalau nama utama tak ditemukan.
+ *
+ * Urutan mengikuti peta substitusi engine: Liberation Mono -> Courier New
+ * -> Menlo -> Courier. Semua berlisensi bebas atau sudah jadi stand industri.
+ */
+export const FONT_KODE_CADANGAN = ["Courier New", "Menlo", "Courier"];
 
 /**
  * Ukuran font (pt) untuk teks kode di slide.

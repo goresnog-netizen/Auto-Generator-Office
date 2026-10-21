@@ -4,8 +4,9 @@
  *
  * Ini uji end-to-end ke binary DeckCraft sungguhan.
  */
+import { createHash } from "node:crypto";
 import { DeckcraftSession, periksaDeckcraft } from "../src/lib/deckcraft.ts";
-import { blokKePerintah } from "../src/lib/deckcraft-ppt.ts";
+import { blokKePerintah, FONT_KODE } from "../src/lib/deckcraft-ppt.ts";
 
 const cek = (label: string, ok: boolean, detail = "") => {
   console.log(`[${ok ? "OK  " : "GAGAL"}] ${label}${detail ? " — " + detail : ""}`);
@@ -91,7 +92,7 @@ async function main() {
     console.log(
       `  font=${font ?? "-"} size=${size ?? "-"} (shape ${boxKode!.id})`,
     );
-    cek("text box kode ber-font monospace", font === "Consolas", `font=${font}`);
+    cek("text box kode ber-font monospace", font === "Liberation Mono", `font=${font}`);
     cek("ukuran font kode 16pt", size === 16, `size=${size}`);
 
     // Kontrol: slide paragraf harus TIDAK ber-font Consolas.
@@ -115,8 +116,46 @@ async function main() {
     const fontPar = detail2.shape.text.paragraphs?.[0]?.runs?.[0]?.props?.font;
     cek(
       "paragraf biasa TIDAK ikut ber-font kode",
-      fontPar !== "Consolas",
+      fontPar !== "Liberation Mono",
       `font paragraf=${fontPar ?? "-"}`,
+    );
+
+    // ---- Font benar-benar DIRENDER, bukan fallback ----
+    //
+    // `font.used` hanya mencatat nama yang diminta; engine tetap bisa
+    // menggambar dengan fallback kalau font itu tak terpasang. Buktinya
+    // dengan membandingkan hash PNG: render "Liberation Mono" harus
+    // BERBEDA dari render font tak dikenal (fallback).
+    const TEKS = "iiiiiiiiii\nMMMMMMMMMM\nWWWWWWWWWW\n0000000000";
+    const hashRender = async (family: string | null): Promise<string> => {
+      await sesi.jalankan([
+        { command: "file.new", params: { theme: "DeckCraft", blank: true } },
+        { command: "slide.new", params: { layout: "titleOnly", title: "Font" } },
+        {
+          command: "insert.textBox",
+          params: { rect: [60, 150, 700, 180], text: TEKS },
+        },
+        ...(family
+          ? [{ command: "format.font", params: { family } }]
+          : []),
+        { command: "format.size", params: { size: 24 } },
+      ]);
+      // ile.new dengan lank: true TIDAK membuat slide, jadi slide
+      // yang kita buat tadi berindeks 0.
+      const png = await sesi.renderSlide(0, 1);
+      const buf = Buffer.from(png, "base64");
+      return createHash("sha256").update(buf).digest("hex").slice(0, 12);
+    };
+
+    const hashKode = await hashRender(FONT_KODE);
+    const hashFallback = await hashRender("FontYangPastiTidakAda999");
+    console.log(
+      `  render ${FONT_KODE}: ${hashKode} | render font tak dikenal: ${hashFallback}`,
+    );
+    cek(
+      "font kode benar-benar dirender (bukan fallback)",
+      hashKode !== hashFallback,
+      "kalau sama, engine memakai fallback - nama font tak berpengaruh",
     );
   } finally {
     await sesi.berhenti();

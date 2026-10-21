@@ -75,11 +75,22 @@ berkas ke keadaan semula.
 | G | Mirror Vercel: `vite.config.ts` meng-import `server/deckcraft-api.ts` statis | build Vercel gagal ("cannot find module") | ✅ 1 pemeriksaan GAGAL |
 | H | Konverter: blok kode tak mengirim `format.font` | kode dirender dengan font body, bukan monospace | ✅ 1 pemeriksaan GAGAL |
 | I | Mirror Vercel: `package.json` diawali BOM | PostCSS/Vite gagal parse JSON → build pecah | ✅ 1 pemeriksaan GAGAL |
+| J | Generator diagram membuang `metadata` fallback | pesan "Chrome tak ada" / "sintaks salah" hilang total | ✅ 2 pemeriksaan GAGAL |
 | E | Setelah semua bug dikembalikan, skrip harus lulus lagi | sanity check | ✅ exit 0 |
 | F | Idem, untuk skrip gambar PDF | sanity check | ✅ exit 0 |
-| J | Idem, untuk skrip fitur DeckCraft | sanity check | ✅ exit 0 |
+| K | Idem, untuk skrip fitur DeckCraft | sanity check | ✅ exit 0 |
+| L | Idem, untuk skrip Mermaid | sanity check | ✅ exit 0 |
 
-Bug A–C berasal dari sesi sebelumnya; D dari sesi 3; G–I dari sesi 4.
+Bug A–C berasal dari sesi sebelumnya; D dari sesi 3; G–I dari sesi 4;
+J dari sesi 5.
+
+> **Penting:** regex transformasi pada negative test harus dibuat *longgar*
+> (spasi fleksibel). Dua kasus sempat gagal karena regex-nya terlalu ketat
+> dan tak cocok setelah format kode berubah - negative test yang tak bisa
+> mendeteksi regresi lebih berbahaya daripada tak ada, karena ia memberi rasa
+> aman yang palsu. Karena itu `ujiRegresi` gagal loudly ("transformasi tak
+> mengubah berkas (test tak valid)") kalau transformasinya tak mengubah
+> apa pun.
 
 Detail penting: skrip retry **satu kali** kalau gagal, TETAPI hanya kalau
 output-nya tak mengandung `[GAGAL]`. Render Mermaid butuh Chrome dan bisa
@@ -114,7 +125,9 @@ dibuat selalu mencetak `[GAGAL]`, jadi tak pernah ter-retry.
 | `verifikasi-fitur-deckcraft.mjs` | font kode, filmstrip, ekspor format, mirror Vercel |
 | `verifikasi-kode-deckcraft.mts` | blok kode ber-font monospace (binary DeckCraft asli) |
 | `verifikasi-api-filmstrip.mjs` | filmstrip + ekspor PDF/GIF lewat HTTP |
-| `verifikasi-ui-filmstrip.mjs` | filmstrip di browser (thumbnail ter-render) |
+| erifikasi-ui-filmstrip.mjs | filmstrip di browser (thumbnail ter-render) |
+| verifikasi-mermaid.mjs | render Mermaid beneran (bukan fallback .mmd) |
+| pasang-mermaid.ps1 | pasang mermaid-cli + deteksi Chrome |
 | `verifikasi-kaca.mjs` | efek kaca terlihat + kontras WCAG |
 | `verifikasi-audit-glass.mjs` | kontras, dead CSS, fallback tanpa blur |
 | `verifikasi-css.mjs` | selector mati + painting order + fallback |

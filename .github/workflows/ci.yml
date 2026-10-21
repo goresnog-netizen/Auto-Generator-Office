@@ -67,6 +67,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Mermaid CLI + Chrome. Chromium TIDAK diunduh (PUPPETEER_SKIP_DOWNLOAD),
+      # jadi runner Linux pakai Chrome for Testing milik Puppeteer sendiri.
+      - name: Siapkan mermaid-cli
+        run: pnpm exec mmdc --version || true
+
       - name: Generator (struktur & validitas berkas)
         run: node scripts/verifikasi-generators.mjs
 

@@ -1,4 +1,17 @@
+# Build script yang boleh dijalankan pnpm saat instalasi.
+#
+# - esbuild: wajib, dipakai skrip verifikasi untuk bundling generator.
+# - puppeteer: BOLEH. Build script-nya mengunduh Chromium (~200 MB) ke cache
+#   Puppeteer. Ini dipakai di CI (runner Linux tak punya Chrome terpasang),
+#   tapi di mesin lokal kita lewati: `scripts/pasang-mermaid.ps1` memakai
+#   Chrome yang sudah terpasang di mesin dan menulis
+#   `config/puppeteer.config.json` yang menunjuknya.
+#
+#   Kalau kamu tak ingin Chromium terunduh sama sekali di mesin lokal,
+#   set PUPPETEER_SKIP_DOWNLOAD=1 sebelum `pnpm install`.
 allowBuilds:
   esbuild: true
+  puppeteer: true
 onlyBuiltDependencies:
   - esbuild
+  - puppeteer
