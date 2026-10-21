@@ -12,6 +12,7 @@ import {
   FONT_KODE,
   TEMA_DECKCRAFT,
   UKURAN_FONT_KODE,
+  WARNA_TEKST_KODE,
 } from "./deckcraft-ppt";
 import type { ContentBlock } from "../types";
 
@@ -182,10 +183,15 @@ describe("blokKePerintah", () => {
     // ...tapi diikuti perintah format yang menempel pada selection itu.
     const font = hasil.find((p) => p.command === "format.font");
     const size = hasil.find((p) => p.command === "format.size");
+    const warna = hasil.find((p) => p.command === "format.color");
     expect(font).toBeDefined();
     expect(size).toBeDefined();
+    expect(warna).toBeDefined();
     expect(font!.params).toMatchObject({ family: FONT_KODE });
     expect(size!.params).toMatchObject({ size: UKURAN_FONT_KODE });
+    // Warna teks eksplisit: tanpa ini, teks kode memakai warna teks tema,
+    // yang di slide terang bisa jadi terlalu terang di atas latar abu-abu.
+    expect(warna!.params).toMatchObject({ color: WARNA_TEKST_KODE });
     // Urutan penting: format baru berlaku pada shape yang barusan dibuat.
     const iKotak = hasil.indexOf(kotak!);
     const iFont = hasil.indexOf(font!);
@@ -249,6 +255,7 @@ describe("blokKePerintah", () => {
       "insert.smartArt",
       "shape.insert",
       "format.bullets",
+      "format.color",
       // Blok kode: font monospace + latar + garis (lihat deckcraft-ppt.ts).
       "format.font",
       "format.size",

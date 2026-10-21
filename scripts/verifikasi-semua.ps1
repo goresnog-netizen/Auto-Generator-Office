@@ -52,6 +52,7 @@ Jalankan "Fitur DeckCraft baru (font, filmstrip, ekspor)" "node" @("scripts/veri
 Jalankan "Generator Node (tulis file nyata)" "node" @("scripts/verifikasi-generators.mjs")
 Jalankan "Mermaid (render SVG nyata)" "node" @("scripts/verifikasi-mermaid.mjs")
 Jalankan "Audit isi generator (konten bermakna)" "node" @("scripts/audit-isi-generator.mjs")
+Jalankan "Audit isi generator Node (buffer, mono, chart)" "node" @("scripts/audit-isi-generator-node.mjs")
 Jalankan "Gambar tertanam di PDF" "node" @("scripts/verifikasi-pdf-gambar.mjs")
 Jalankan "Fitur baru (CI, undo, pesan, diagram)" "node" @("scripts/verifikasi-fitur-baru.mjs")
 Jalankan "Negative test (skrip tangkap regresi)" "node" @("scripts/audit-negative-test.mjs")

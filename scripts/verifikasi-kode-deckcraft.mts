@@ -93,7 +93,7 @@ async function main() {
       `  font=${font ?? "-"} size=${size ?? "-"} (shape ${boxKode!.id})`,
     );
     cek("text box kode ber-font monospace", font === "Liberation Mono", `font=${font}`);
-    cek("ukuran font kode 16pt", size === 16, `size=${size}`);
+    cek("ukuran font kode 18pt", size === 18, `size=${size}`);
 
     // Kontrol: slide paragraf harus TIDAK ber-font Consolas.
     const idxPar = deck.slides.findIndex((s) => s.title === "Laporan");

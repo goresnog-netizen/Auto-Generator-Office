@@ -12,7 +12,7 @@
  *  - Warna memakai `argb` (ARGB 8 digit), bukan `rgb`.
  */
 
-import {
+import type {
   DocumentGenerator,
   DocumentConfig,
   DocumentContent,

@@ -214,6 +214,35 @@ ujiRegresi(
   "scripts/verifikasi-mermaid.mjs",
 );
 
+// --- M. Generator PPTX Node: buffer dikembalikan, tak ada file liar ---
+// Efeknya: `generateDocument("pptx", ...)` mengembalikan `buffer: undefined`
+// dan menulis file .pptx ke folder kerja tanpa diminta.
+ujiRegresi(
+  "M. Generator PPTX Node tak kembalikan buffer",
+  path.join(AKAR, "src", "generators", "pptx.ts"),
+  (s) =>
+    s.replace(
+      /const buffer = \(await pptx\.write\(\{\s*outputType: "nodebuffer",\s*\}\)\) as Buffer;/,
+      "const buffer = undefined as unknown as Buffer;",
+    ),
+  true,
+  "scripts/audit-isi-generator-node.mjs",
+);
+
+// --- N. Generator PPTX Node: blok kode jadi bullet biasa ---
+// Efeknya: blok kode dirender dengan font body + bullet, jadi tak pernah
+// terlihat sebagai kode di PowerPoint.
+ujiRegresi(
+  "N. Generator PPTX Node blok kode tanpa monospace",
+  path.join(AKAR, "src", "generators", "pptx.ts"),
+  (s) =>
+    // Ganti font monospace dengan font body: hasil PPTX lalu tak punya
+    // typeface monospace sama sekali.
+    s.replace(/fontFace: "Consolas"/g, 'fontFace: "Arial"'),
+  true,
+  "scripts/audit-isi-generator-node.mjs",
+);
+
 // --- Sanity: setelah semua dibalik, skrip harus lulus lagi ---
 const akhir = jalankanSkrip();
 cek(

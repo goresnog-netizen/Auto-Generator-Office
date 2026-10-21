@@ -3,7 +3,7 @@
  * Uses pdfkit for PDF generation
  */
 
-import {
+import type {
   DocumentGenerator,
   DocumentConfig,
   DocumentContent,

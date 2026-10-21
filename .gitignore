@@ -31,6 +31,11 @@ suite-run*.txt
 probe-*.mjs
 .devserver.log
 .devserver.err
+# Artefak test run (screenshot + berkas ekspor hasil uji).
+testrun/
+
+# Log sementara dari skrip verifikasi.
+*.log
 
 # Konfigurasi Puppeteer: berisi path Chrome milik MESIN INI, jadi tak
 # boleh di-commit. Di-regenerate oleh `pnpm pasang:mermaid`.
@@ -66,6 +71,11 @@ scripts/*
 !scripts/verifikasi-api-filmstrip.mjs
 !scripts/verifikasi-ui-filmstrip.mjs
 !scripts/verifikasi-mermaid.mjs
+!scripts/audit-isi-generator-node.mjs
+!scripts/testrun-screenshot.mjs
+!scripts/testrun-ekspor.mjs
+!scripts/testrun-audit.mjs
+!scripts/testrun-isi.mjs
 !scripts/pasang-mermaid.ps1
 !scripts/zip-util.mjs
 !scripts/perbaiki-encoding.ps1

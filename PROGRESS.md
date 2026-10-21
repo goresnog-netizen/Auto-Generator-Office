@@ -509,3 +509,80 @@ Alasan (hasil uji, bukan selera):
 - Mermaid: 20 pemeriksaan (3 jenis diagram ter-render beneran)
 - Negative test: 10 kasus, semuanya terbukti menangkap regresi
 - Detail: `docs/DIAGRAM-MERMAID.md`
+## Sesi 6 (2026-10-21) - TEST RUN visual + 4 bug nyata di area yang belum pernah diuji
+
+### Test run (lihat hasilnya)
+Sesi ini dimulai dengan TEST RUN, bukan asumsi. Yang dilakukan:
+- 4 screenshot UI (tema terang, tema gelap, DeckCraft Studio + filmstrip,
+  pratinjau slide kode) -> `testrun/`.
+- Render deck nyata (4 slide) + ekspor PPTX/PDF/GIF + diagram Mermaid.
+- Pemeriksaan ISI dokumen hasil ekspor (bukan cuma ukurannya).
+
+Hasil visual:
+- Tema gelap & terang: bagus, kontras & hierarki rapi, glassmorphism Subtiel.
+- DeckCraft Studio: tombol Bangun Deck, Unduh PPTX/PDF/GIF, toggle filmstrip
+  semua bekerja; thumbnail benar-benar ter-render.
+- Blok kode: Liberation Mono, kontras bagus, indentasi terjaga.
+- Mermaid: flowchart benar-benar ter-render jadi SVG.
+
+### 4 bug nyata yang ditemukan (semua di area yang belum pernah diuji)
+1. **Generator PPTX Node menulis file liar ke folder kerja.** `generate()` calls
+   `pptx.writeFile({fileName})` dan mengembalikan `buffer: undefined` -
+   jadi pemanggil yang tak punya `outputPath` tak dapat buffer sama sekali,
+   DAN file `.pptx` muncul di root proyek tanpa diminta. Perbaikan: tulis ke
+   buffer dulu (`write({outputType:"nodebuffer"})`), simpan ke disk HANYA
+   kalau `outputPath` diberikan. Sekarang konsisten dengan word/xlsx/pdf.
+2. **Blok `code` di PPTX Node dirender sebagai bullet biasa.** Kode masuk ke
+   `bulletTertunda`, jadi ia dapat font body + bullet - tak pernah terlihat
+   sebagai kode di PowerPoint. Perbaikan: text box monospace (Consolas)
+   dengan latar & garis.
+3. **Import tak bisa di-resolve di Node ESM.** `src/generators/index.ts`
+   import `'./word'` (tanpa ekstensi) dan `'../index'`; `src/index.ts`
+   import `'./types'` (directory import). Semuanya gagal di Node ESM:
+   "Cannot find module" / "does not provide an export named 'ChartBlock'".
+   Perbaikan: ekstensi `.ts` eksplisit + `import type` untuk yang cuma
+   tipe. Semua generator di `src/generators/` sekarang bisa diimpor di Node.
+4. **Badge FPS menampilkan angka menyesatkan.** Di headless (CI, tanpa GPU)
+   `requestAnimationFrame` jarang dipanggil -> FPS terbaca 1-3 dan chip
+   tampil MERAH seolah app lambat. Perbaikan: di bawah 10 fps, angka tak
+   bisa dipercaya -> chip menampilkan "?" dengan warna netral + tooltip
+   yang menjelaskan. Tooltip lama juga masih menyebut "Layer blur: 47"
+   (angka usang, sekarang 16) - dihapus.
+
+### Peningkatan visual blok kode (dari hasil test run)
+- Font 16 pt -> **18 pt** (di slide 960 pt = 13,3 inci, 16 pt masih kecil
+  dibaca dari jauh).
+- Latar `F4F5F7` -> `EEF0F3` (abu-abu, bukan putih - blok jadi terlihat
+  terpisah tanpa garis tebal).
+- Garis `D7DBE0` -> `C8CDD4` (lebih tegas).
+- **Warna teks kini eksplisit** (`format.color` = `111827`). Sebelumnya
+  `WARNA_TEKST_KODE` didefinisikan tapi TAK PERNAH DIPAKAI - teks kode
+  memakai warna teks tema, yang di slide terang bisa jadi kurang kontras
+  di atas latar abu-abu. Perbaikan: `format.color` dikirim (terbukti jalan:
+  `ok: true` di batch engine).
+- Lebar dihitung dari baris terpanjang (11,2 pt per karakter untuk
+  Liberation Mono pada 18 pt).
+
+### Skrip verifikasi baru
+- `scripts/audit-isi-generator-node.mjs` (25) - ISI dokumen hasil ekspor
+  generator Node: buffer dikembalikan, tak ada file liar, blok kode
+  monospace, grafik punya `<c:ser>` (bukan bingkai kosong), tabel & isi
+  teks di docx/xlsx/pdf.
+- Negative test 10 -> **12** kasus: (M) PPTX Node tak kembalikan buffer,
+  (N) blok kode PPTX Node tanpa monospace.
+
+### Bug pada skrip verifikasi sendiri
+- `verifikasi-semua.ps1` sempat berisi typo `Jalarkan` (bukan `Jalankan`).
+  Akibatnya baris itu dieksekusi sebagai perintah yang tak dikenal, dan
+  karena `$ErrorActionPreference = "Continue"`, suite tetap exit 0 - skrip
+  AUDAUDIT BARU tak pernah jalan padahal terlihat "lulus". Ini bugs yang
+  kelas paling berbahaya: pemeriksaan yang tak dijalankan tapi dilaporkan
+  hijau. Diperbaiki & dicek lewat `Select-String "Jalarkan"`.
+
+## Status verifikasi terakhir (Sesi 6)
+
+`pnpm verify:all` -> **351 pemeriksaan lulus, 0 gagal**, exit 0
+- typecheck browser + server + node: 0 error
+- 72 unit test lulus
+- Audit isi generator Node: 25 pemeriksaan
+- Negative test: 12 kasus, semuanya terbukti menangkap regresi
