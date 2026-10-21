@@ -597,9 +597,11 @@ Hasil visual:
 `pnpm verify:all` -> **351 pemeriksaan lulus, 0 gagal**, exit 0
 - typecheck browser + server + node: 0 error
 - 72 unit test lulus
+- Siring area UI (tab galeri, panel Form, tombol ekspor): 10 pemeriksaan,
+  tak ada error runtime di halaman
 - Audit isi generator Node: 25 pemeriksaan
 - Negative test: 13 kasus, semuanya terbukti menangkap regresi
-- 30 langkah suite terdaftar (dicek penjaga salah ketik)
+- 31 langkah suite terdaftar (dicek penjaga salah ketik)
 ## Sesi 7 (2026-10-21) - audit gap: koreksi klaim, CI terbukti jalan
 
 ### KOREKSI: 4 dari 5 "gap" Sesi 6 ternyata BUKAN gap
@@ -683,11 +685,28 @@ dependensi):
 
 ## Status verifikasi terakhir (Sesi 7)
 
-`pnpm verify:all` -> **387 pemeriksaan lulus, 0 gagal**, exit 0
+`pnpm verify:all` -> **397 pemeriksaan lulus, 0 gagal**, exit 0
 - typecheck browser + server + node: 0 error
 - 72 unit test lulus
+- Siring area UI (tab galeri, panel Form, tombol ekspor): 10 pemeriksaan,
+  tak ada error runtime di halaman
 - Audit gap: 33 pemeriksaan
 - Negative test: 13 kasus, semuanya terbukti menangkap regresi
-- 30 langkah suite terdaftar (dicek penjaga salah ketik)
+- 31 langkah suite terdaftar (dicek penjaga salah ketik)
 - `pnpm verify:ci` -> 34 pemeriksaan, semua lulus (workflow CI terbukti
   akan jalan begitu repo di-push)
+### Siring: area UI yang belum pernah disentuh
+`scripts/verifikasi-siring.mjs` (10) - menelusuri bagian aplikasi yang
+belum pernah diuji end-to-end:
+- 5 tab galeri (Semua, Dokumen, Presentasi, Spreadsheet, Infografis) bisa
+  diklik & punya isi;
+- panel Form (FormMode) punya 20 field isian metadata;
+- 10 tombol ekspor ditemukan di sidebar (PDF, Word, PPT, Excel, Diagram,
+  Infografis PNG, "Ekspor Semua", plus Unduh PPTX/PDF/GIF dari DeckCraft);
+- klik template di galeri membuka panel detail (tombol "Muat" ada);
+- **tak ada error runtime di halaman** (dicek lewat
+  `Runtime.exceptionThrown` + `Log.entryAdded`).
+
+Catatan: versi pertama skrip ini menganggap panel Form "tak bisa dibuka" -
+padahal `FormMode` BUKAN tab terpisah, ia panel yang selalu tampil di
+sidebar. Itu salah paham skrip, bukan bug aplikasi.

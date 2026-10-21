@@ -31,14 +31,16 @@ suite-run*.txt
 probe-*.mjs
 .devserver.log
 .devserver.err
+
 # Artefak test run (screenshot + berkas ekspor hasil uji).
 testrun/
-
-# Log sementara dari skrip verifikasi.
-*.log
 testrun-gap/
 testrun-font/
 testrun-audit-gap/
+testrun-siring/
+
+# Log sementara dari skrip verifikasi.
+*.log
 
 # Konfigurasi Puppeteer: berisi path Chrome milik MESIN INI, jadi tak
 # boleh di-commit. Di-regenerate oleh `pnpm pasang:mermaid`.
@@ -92,6 +94,7 @@ scripts/*
 !scripts/verifikasi-semua.ps1
 !scripts/sync-deploy.ps1
 !scripts/capture-tema.mjs
+!scripts/verifikasi-siring.mjs
 fable/
 Files/
 Menu/

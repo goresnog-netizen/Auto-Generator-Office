@@ -42,7 +42,8 @@
     "audit:isi-node": "node scripts/audit-isi-generator-node.mjs",
     "verify:ci": "node scripts/simulasi-ci.mjs",
     "audit:gap": "node scripts/audit-gap-beser.mjs",
-    "audit:font-kode": "node scripts/audit-font-kode.mjs"
+    "audit:font-kode": "node scripts/audit-font-kode.mjs",
+    "verify:siring": "node scripts/verifikasi-siring.mjs"
   },
   "dependencies": {
     "docx": "^9.10.0",

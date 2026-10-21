@@ -93,6 +93,7 @@ if ($dev) {
   Jalankan "API filmstrip + ekspor format" "node" @("scripts/verifikasi-api-filmstrip.mjs")
   Jalankan "UI (Chrome DevTools)" "node" @("scripts/verify-ui.mjs")
   Jalankan "UI filmstrip" "node" @("scripts/verifikasi-ui-filmstrip.mjs")
+  Jalankan "Siring area UI (tab, form, ekspor)" "node" @("scripts/verifikasi-siring.mjs")
   Jalankan "Konkurensi" "node" @("scripts/verifikasi-konkurensi.mjs")
   Jalankan "Efek kaca + kontras" "node" @("scripts/verifikasi-kaca.mjs")
   Jalankan "Audit CSS (dead selector, fallback)" "node" @("scripts/verifikasi-css.mjs")
