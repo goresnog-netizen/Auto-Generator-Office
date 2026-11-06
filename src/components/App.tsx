@@ -28,6 +28,8 @@ import { DeckCraftStudio } from "./DeckCraftStudio";
 import { AutoGenerate } from "./AutoGenerate";
 import { PerformaBadge } from "./PerformaBadge";
 import { eksporDokumen } from "../lib/exporter";
+import { TEMA_PPT } from "../lib/ppt-desain";
+import { labelMutu, periksaBahasa, rapikanEjaanBlok } from "../lib/bahasa";
 import { renderInfografisPng } from "../lib/infografis";
 import {
   generateCompletion,
@@ -62,6 +64,19 @@ import type { ContentBlock, DocumentType, LaporanMetadata } from "../types";
 // brand sage #b5cea5).
 
 const editor = new DocumentEditor();
+
+/**
+ * Temuan bahasa yang bisa diperbaiki tanpa mengubah makna. Temuan lain
+ * (kalimat panjang, klaim tanpa angka) hanya ditandai — keputusannya
+ * milik penulis, bukan mesin.
+ */
+const KODE_BISA_RAPIKAN = new Set([
+  "kata-tidak-baku",
+  "format-mata-uang",
+  "format-persen",
+  "spasi-ganda",
+  "spasi-tanda-baca",
+]);
 
 type StatusEkspor = "idle" | "loading" | "sukses" | "gagal";
 interface StatusTombol {
@@ -638,6 +653,20 @@ function AppInner() {
    */
   const riwayatAutoRef = useRef<{ blocks: ContentBlock[]; judul: string }[]>([]);
   const indeksAutoRef = useRef(-1);
+  /** Menandai snapshot undo sudah diambil pada proses generate berjalan. */
+  const snapshotAutoRef = useRef(false);
+
+  /** Simpan keadaan kanvas saat ini sebagai titik undo auto-generate. */
+  const catatRiwayatAuto = () => {
+    const baru = [
+      ...riwayatAutoRef.current.slice(0, indeksAutoRef.current + 1),
+      { blocks: klonBlocks(editor.getBlocks()), judul },
+    ].slice(-20);
+    riwayatAutoRef.current = baru;
+    indeksAutoRef.current = baru.length - 1;
+    setRiwayatAuto(baru);
+    setIndeksAuto(baru.length - 1);
+  };
   const [statusEkspor, setStatusEkspor] = useState<
     Record<DocumentType, StatusTombol>
   >({
@@ -649,6 +678,17 @@ function AppInner() {
   });
   const [statusInfografis, setStatusInfografis] =
     useState<StatusTombol>(STATUS_AWAL);
+  // Mutu bahasa kanvas — dihitung ulang setiap isi berubah, tanpa AI.
+  const mutuBahasa = useMemo(() => periksaBahasa(blocks), [blocks]);
+  const bisaRapikan = mutuBahasa.temuan.some((t) => KODE_BISA_RAPIKAN.has(t.kode));
+
+  // Tema desain presentasi untuk ekspor PPTX (lihat src/lib/ppt-desain.ts).
+  const [temaPpt, setTemaPpt] = useState<string>(() => {
+    const tersimpan = localStorage.getItem("nitz909-tema-ppt");
+    return tersimpan && TEMA_PPT.some((t) => t.id === tersimpan)
+      ? tersimpan
+      : "swiss";
+  });
   const [tabPanduan, setTabPanduan] = useState<"infografis" | "ppt">("ppt");
   // Varian aksen warna (dasar Freebuff tetap): freebuff | blue | green | senja | toska
   const [varianWarna, setVarianWarna] = useState<
@@ -1357,6 +1397,7 @@ function AppInner() {
             ...s,
             [format]: { state: "loading", pesan: msg },
           })),
+        { temaPpt },
       );
       setStatusEkspor((s) => ({
         ...s,
@@ -3237,31 +3278,56 @@ function AppInner() {
               judul={judul}
               mode={modeAutoGenerate}
               onMode={setModeAutoGenerate}
-              onHasil={(hasil) => {
-                // Simpan keadaan SEBELUM generate supaya Undo bisa
-                // mengembalikan dokumen ke kondisi itu dalam satu klik.
-                const baru = [
-                  ...riwayatAutoRef.current.slice(0, indeksAutoRef.current + 1),
-                  { blocks: klonBlocks(editor.getBlocks()), judul },
-                ].slice(-20);
-                riwayatAutoRef.current = baru;
-                indeksAutoRef.current = baru.length - 1;
-                setRiwayatAuto(baru);
-                setIndeksAuto(baru.length - 1);
-                if (modeAutoGenerate === "tambah") {
-                  // Tambahkan di akhir isi yang ada; judul tidak diubah.
-                  ubah(() =>
-                    editor.setBlocks([...editor.getBlocks(), ...hasil.blocks]),
-                  );
-                } else {
-                  ubah(() => editor.setBlocks(hasil.blocks));
-                  setJudul(hasil.judul);
+              // Bahan dari berkas/tautan terlampir — dibaca saat tombol ditekan.
+              ambilBahan={konteksSumber}
+              onBagian={(blokBagian, info) => {
+                // Bagian PERTAMA YANG BERHASIL (bukan selalu indeks 0) yang
+                // mengganti kanvas: kalau bagian 0 gagal, bagian 1 tidak boleh
+                // menempel di atas dokumen lama.
+                const pertama = !snapshotAutoRef.current;
+                if (pertama) {
+                  catatRiwayatAuto();
+                  snapshotAutoRef.current = true;
                 }
+                if (pertama && modeAutoGenerate === "ganti") {
+                  ubah(() => editor.setBlocks(blokBagian));
+                } else {
+                  ubah(() =>
+                    editor.setBlocks([...editor.getBlocks(), ...blokBagian]),
+                  );
+                }
+                setStatusDraf({
+                  state: "loading",
+                  pesan: `Bagian ${info.indeks + 1}/${info.total} masuk kanvas: ${info.judul}`,
+                });
+              }}
+              onHasil={(hasil, opsiHasil) => {
+                if (opsiHasil?.sudahDiKanvas) {
+                  // Mode bertahap: blok sudah ditempatkan per bagian.
+                  setJudul(hasil.judul);
+                } else {
+                  // Sekali jalan: snapshot diambil di sini.
+                  if (!snapshotAutoRef.current) catatRiwayatAuto();
+                  if (modeAutoGenerate === "tambah") {
+                    // Tambahkan di akhir isi yang ada; judul tidak diubah.
+                    ubah(() =>
+                      editor.setBlocks([
+                        ...editor.getBlocks(),
+                        ...hasil.blocks,
+                      ]),
+                    );
+                  } else {
+                    ubah(() => editor.setBlocks(hasil.blocks));
+                    setJudul(hasil.judul);
+                  }
+                }
+                snapshotAutoRef.current = false;
                 setStatusDraf({
                   state: "sukses",
                   pesan:
                     `Auto-generate: ${hasil.statistik.totalBlok} blok ` +
-                    `${modeAutoGenerate === "tambah" ? "ditambahkan" : "dibuat"} dari prompt.`,
+                    `${modeAutoGenerate === "tambah" ? "ditambahkan" : "dibuat"} dari prompt · ` +
+                    `mutu bahasa ${hasil.kualitas.skor}/100.`,
                 });
               }}
               bisaUndoAuto={indeksAuto >= 0}
@@ -3446,6 +3512,143 @@ function AppInner() {
               />
             </div>
           </Card>
+
+          {/* ===== Mutu bahasa: skor + perbaikan cepat ===== */}
+          <Card>
+            <SectionHeader
+              judul="Mutu bahasa"
+              deskripsi="Diperiksa otomatis: ejaan baku, panjang kalimat, dan kejelasan butir."
+            />
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-3)",
+              }}
+            >
+              <strong style={{ fontSize: 30, lineHeight: 1 }}>
+                {mutuBahasa.skor}
+              </strong>
+              <div
+                style={{
+                  fontSize: "var(--font-size-caption)",
+                  color: "var(--muted)",
+                  lineHeight: 1.5,
+                }}
+              >
+                <div style={{ color: "var(--text)" }}>
+                  {labelMutu(mutuBahasa.skor)}
+                </div>
+                <div>
+                  {mutuBahasa.temuan.length} temuan ·{" "}
+                  {mutuBahasa.jumlahKata} kata
+                </div>
+              </div>
+            </div>
+            {mutuBahasa.temuan.slice(0, 3).map((t, i) => (
+              <div
+                key={`${t.kode}-${i}`}
+                style={{
+                  marginTop: "var(--space-2)",
+                  fontSize: "var(--font-size-caption)",
+                  color: "var(--muted)",
+                  lineHeight: 1.5,
+                }}
+              >
+                • {t.pesan}
+                {t.cuplikan ? (
+                  <em style={{ opacity: 0.75 }}> — “{t.cuplikan}”</em>
+                ) : null}
+              </div>
+            ))}
+            {bisaRapikan && (
+              <div style={{ marginTop: "var(--space-3)" }}>
+                <Button
+                  type="secondary"
+                  block
+                  size="sm"
+                  onClick={() => {
+                    ubah(() =>
+                      editor.setBlocks(rapikanEjaanBlok(editor.getBlocks())),
+                    );
+                    setStatusDraf({
+                      state: "sukses",
+                      pesan:
+                        "Ejaan dirapikan: kata tidak baku, spasi, dan format angka diperbaiki.",
+                    });
+                  }}
+                >
+                  Rapikan ejaan otomatis
+                </Button>
+              </div>
+            )}
+          </Card>
+
+          {/* ===== Tema presentasi: mengatur desain deck hasil ekspor PPTX ===== */}
+          <Card>
+            <SectionHeader
+              judul="Tema presentasi"
+              deskripsi="Palet, tipografi, latar, dan tata letak slide untuk ekspor PPTX."
+            />
+            <Select
+              label="Desain deck"
+              value={temaPpt}
+              options={TEMA_PPT.map((t) => ({
+                value: t.id,
+                label: `${t.nama} · ${t.mode === "gelap" ? "gelap" : "terang"}`,
+              }))}
+              onChange={(v) => {
+                setTemaPpt(v);
+                localStorage.setItem("nitz909-tema-ppt", v);
+              }}
+            />
+            {(() => {
+              const tema = TEMA_PPT.find((t) => t.id === temaPpt) ?? TEMA_PPT[0];
+              return (
+                <>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 6,
+                      marginTop: "var(--space-2)",
+                    }}
+                    aria-hidden="true"
+                  >
+                    {[
+                      tema.warna.latar,
+                      tema.warna.latarAlt,
+                      tema.warna.primer,
+                      tema.warna.aksen,
+                      tema.warna.teksLembut,
+                    ].map((warna) => (
+                      <span
+                        key={warna}
+                        title={`#${warna}`}
+                        style={{
+                          flex: 1,
+                          height: 18,
+                          borderRadius: "var(--radius-sm)",
+                          background: `#${warna}`,
+                          border: "1px solid var(--border)",
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <p
+                    style={{
+                      margin: "var(--space-2) 0 0",
+                      fontSize: "var(--font-size-caption)",
+                      color: "var(--muted)",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {tema.deskripsi}
+                  </p>
+                </>
+              );
+            })()}
+          </Card>
+
           {FORMAT_INFO.map((f) => {
             const st = statusEkspor[f.format];
             return (

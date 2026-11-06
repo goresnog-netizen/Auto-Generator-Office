@@ -3,20 +3,26 @@
  * Exports all document generators
  */
 
-export { WordGenerator } from './word';
-export { PPTXGenerator } from './pptx';
-export { XLSXGenerator } from './xlsx';
-export { PDFGenerator } from './pdf';
-export { DiagramGenerator } from './diagram';
+export { WordGenerator } from './word.ts';
+export { PPTXGenerator } from './pptx.ts';
+export { XLSXGenerator } from './xlsx.ts';
+export { PDFGenerator } from './pdf.ts';
+export { DiagramGenerator } from './diagram.ts';
 
-import { WordGenerator } from './word';
-import { PPTXGenerator } from './pptx';
-import { XLSXGenerator } from './xlsx';
-import { PDFGenerator } from './pdf';
-import { DiagramGenerator } from './diagram';
+import { WordGenerator } from './word.ts';
+import { PPTXGenerator } from './pptx.ts';
+import { XLSXGenerator } from './xlsx.ts';
+import { PDFGenerator } from './pdf.ts';
+import { DiagramGenerator } from './diagram.ts';
 
-import { NitZ909, DocumentGenerator, DocumentConfig, DocumentContent, GeneratorResult } from '../index';
-import { ThemeTokens } from '../types/index.ts';
+import { NitZ909 } from '../index.ts';
+import type {
+  DocumentGenerator,
+  DocumentConfig,
+  DocumentContent,
+  GeneratorResult,
+} from '../types/index.ts';
+import type { ThemeTokens } from '../types/index.ts';
 
 /**
  * Create a fully configured NitZ-909 instance with all generators

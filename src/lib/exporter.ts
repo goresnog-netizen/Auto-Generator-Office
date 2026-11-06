@@ -6,6 +6,8 @@
  * murni di browser tanpa dependensi server.
  */
 import type { ContentBlock } from "../types";
+import { TEMA_BAWAAN, getTemaPpt, susunDeckPpt } from "./ppt-desain";
+import { renderSemuaDiagram } from "./mermaid-gambar";
 
 export type FormatEkspor = "pdf" | "word" | "pptx" | "xlsx" | "diagram";
 
@@ -301,10 +303,31 @@ async function eksporExcel(
   return { pesan: "Berkas XLSX terunduh — bisa dibuka di Excel." };
 }
 
+/** Tanggal hari ini dalam format Indonesia: "6 November 2026". */
+function tanggalIndonesia(d: Date = new Date()): string {
+  const bulan = [
+    "Januari",
+    "Februari",
+    "Maret",
+    "April",
+    "Mei",
+    "Juni",
+    "Juli",
+    "Agustus",
+    "September",
+    "Oktober",
+    "November",
+    "Desember",
+  ];
+  return `${d.getDate()} ${bulan[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 async function eksporPpt(
   judul: string,
   blocks: ContentBlock[],
   sumber: string[],
+  temaId?: string,
+  onProgress?: (message: string) => void,
 ): Promise<HasilEkspor> {
   let PptxGenJS: typeof import("pptxgenjs").default;
   try {
@@ -314,45 +337,22 @@ async function eksporPpt(
       "Pustaka “pptxgenjs” belum terpasang. Jalankan: pnpm add pptxgenjs",
     );
   }
+
   const pptx = new PptxGenJS();
   pptx.layout = "LAYOUT_WIDE";
   pptx.author = "NitZ-909";
   pptx.title = judul;
-  // ===== TEMA: deteksi otomatis dari penanda "TEMA-MILITER" pada caption/alt foto.
-  // Palet militer: latar hijau olive gelap + aksen emas (bukan merek instansi mana pun).
+  pptx.company = "NitZ-909";
+
+  // ===== Tema: penanda "TEMA-MILITER" pada caption/alt foto tetap dihormati,
+  // supaya dokumen lama tidak berubah rupa saat diekspor ulang.
   const militer = blocks.some(
     (b) =>
       b.type === "image" &&
       /TEMA-MILITER/i.test(`${b.caption ?? ""} ${b.alt ?? ""}`),
   );
-  const WARNA_UTAMA = militer ? "C9A227" : "82966F";
-  const WARNA_TEKS = militer ? "F1EEE4" : "1C1D1C";
-  const WARNA_ABU = militer ? "A7B08F" : "6B7280";
-  const BG_SLIDE = militer ? "232B1E" : "FFFFFF";
-  try {
-    pptx.defineSlideMaster({
-      title: "NITZ_COVER",
-      background: { color: BG_SLIDE },
-      objects: [
-        { rect: { x: 0, y: 0, w: "100%", h: 0.28, fill: { color: WARNA_UTAMA } } },
-        { text: { text: militer ? "DATA UJI · KLASIFIKASI: CONTOH (BUKAN DOKUMEN OPERASI NYATA)" : "NitZ-909 · DATA UJI (sintetis)", options: { x: 0.5, y: 6.85, w: 12.33, h: 0.4, fontSize: 9, color: WARNA_ABU } } },
-      ],
-      slideNumber: { x: 12.4, y: 6.85, w: 0.5, h: 0.4, fontSize: 9, color: WARNA_ABU },
-    });
-    pptx.defineSlideMaster({
-      title: "NITZ_ISI",
-      background: { color: BG_SLIDE },
-      objects: [
-        { rect: { x: 0, y: 0, w: "100%", h: 0.12, fill: { color: WARNA_UTAMA } } },
-        { text: { text: judul, options: { x: 0.5, y: 6.9, w: 10, h: 0.35, fontSize: 9, color: WARNA_ABU } } },
-      ],
-      slideNumber: { x: 12.4, y: 6.9, w: 0.5, h: 0.35, fontSize: 9, color: WARNA_ABU },
-    });
-  } catch {
-    /* master opsional */
-  }
-  const masterCover = "NITZ_COVER";
-  const masterIsi = "NITZ_ISI";
+  const tema = getTemaPpt(temaId || (militer ? "olive" : TEMA_BAWAAN));
+
   // Ambil gambar remote jadi data-URL (bila offline → null, ekspor tetap jalan).
   const urlKeDataUrl = async (src: string): Promise<string | null> => {
     const s = (src || "").trim();
@@ -372,135 +372,86 @@ async function eksporPpt(
       return null;
     }
   };
-  const sampul = pptx.addSlide({ masterName: masterCover });
-  const hero = blocks.find((b) => b.type === "image");
-  if (militer && hero?.type === "image") {
-    // Latar sampul full-bleed + overlay gelap agar judul spektakuler tapi tetap terbaca.
-    const data = await urlKeDataUrl(hero.src);
-    if (data) {
-      sampul.background = { data };
-      sampul.addShape("rect", { x: 0, y: 0, w: "100%", h: "100%", fill: { color: "0F140B", transparency: 42 } });
-      sampul.addShape("rect", { x: 0, y: 5.4, w: "100%", h: 2.1, fill: { color: "0F140B", transparency: 25 } });
-    }
-  }
-  const subSampul = blocks.find((b) => b.type === "paragraph");
-  sampul.addText(judul, { x: 0.7, y: militer ? 4.6 : 1.6, w: 11.9, h: 1.4, fontSize: 40, bold: true, color: militer ? "FFFFFF" : WARNA_TEKS, align: "left" });
-  sampul.addShape("line", { x: 0.7, y: militer ? 5.85 : 3.15, w: 2.4, h: 0, line: { color: WARNA_UTAMA, width: 4 } });
-  if (subSampul?.type === "paragraph") {
-    sampul.addText(subSampul.text, { x: 0.7, y: militer ? 6.0 : 3.35, w: 11.5, h: 0.8, fontSize: militer ? 12 : 14, color: militer ? "E6E1CF" : WARNA_ABU });
-  }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let slide: any = null;
-  let poin: string[] = [];
-  const commit = () => {
-    if (slide && poin.length > 0) {
-      slide.addText(
-        poin.slice(0, 6).map((t) => ({
-          text: t,
-          options: { fontSize: 14, bullet: { code: "2022" }, color: WARNA_TEKS },
-        })),
-        { x: 0.6, y: 1.5, w: 12.13, h: 4.6 },
-      );
-      poin = [];
-    }
-  };
-  const judulSlide = (teks: string) => {
-    slide.addText(teks, { x: 0.6, y: 0.35, w: 12.13, h: 0.8, fontSize: 28, bold: true, color: WARNA_TEKS });
-    slide.addShape("line", { x: 0.6, y: 1.15, w: 1.4, h: 0, line: { color: WARNA_UTAMA, width: 3 } });
-  };
-  const barisTabel = (kepala: string[], isi: string[][]) => {
-    if (!militer) return [kepala, ...isi];
-    const head = kepala.map((h) => ({ text: h, options: { bold: true, color: "232B1E", fill: { color: WARNA_UTAMA }, fontSize: 12 } }));
-    const body = isi.map((r, i) => r.map((c) => ({ text: c, options: { fontSize: 11, color: WARNA_TEKS, fill: { color: i % 2 === 0 ? "2A3322" : "232B1E" } } })));
-    return [head, ...body];
-  };
-  const opsiChart = militer
-    ? {
-        x: 0.6, y: 1.5, w: 12.13, h: 4.4,
-        chartColors: ["C9A227", "8A9A5B", "E8E2D0", "5C6B3C", "F4F1E6"],
-        showLegend: true, legendPos: "b", legendColor: "F1EEE4",
-        catAxisLabelColor: "D8D3C0", valAxisLabelColor: "D8D3C0",
-        catAxisLineColor: "5C6B3C", valAxisLineColor: "5C6B3C",
-        valGridLine: { color: "3A452F", style: "solid" as const, size: 0.5 },
-      }
-    : { x: 0.6, y: 1.5, w: 12.13, h: 4.4 };
+
+  // Gambar remote diunduh SEKALI di sini, lalu bloknya diganti versi data-URL.
+  // Tanpa langkah ini, gambar `https://…` tidak bisa disisipkan pptxgenjs dan
+  // hanya muncul sebagai keterangan — perilaku yang sudah ada di jalur lama.
+  const blocksSiap: ContentBlock[] = [];
   for (const b of blocks) {
-    if (b.type === "heading" && b.level <= 2) {
-      if (b.level === 1 && b.text.trim() === judul.trim() && !slide) continue;
-      commit();
-      slide = pptx.addSlide({ masterName: masterIsi });
-      judulSlide(b.text);
-    } else if (!slide) {
-      slide = pptx.addSlide({ masterName: masterIsi });
-      judulSlide(judul);
-      poin.push(teksBlok(b));
-    } else if (b.type === "table") {
-      commit();
-      try {
-        slide.addTable(barisTabel(b.headers, b.rows), { x: 0.6, y: 1.5, w: 12.13, border: militer ? { pt: 0.5, color: "5C6B3C" } : { pt: 0.5, color: "D9E2D2" } });
-      } catch {
-        slide.addTable([b.headers, ...b.rows], { x: 0.6, y: 1.5, w: 12.13 });
-      }
-    } else if (b.type === "chart") {
-      // Grafik NATIVE (bukan gambar) ala PPT Master: bisa diklik & diubah di PowerPoint
-      commit();
-      // Tipe grafik harus huruf kecil: pptxgenjs mencocokkan `CHART_TYPE`
-      // secara case-sensitive, dan tipe huruf besar menghasilkan bingkai
-      // grafik kosong tanpa seri (tidak melempar error, jadi try/catch di
-      // bawah tidak pernah menangkapnya).
-      const tipe =
-        b.chartType === "bar" ||
-        b.chartType === "line" ||
-        b.chartType === "pie" ||
-        b.chartType === "area" ||
-        b.chartType === "scatter"
-          ? b.chartType
-          : "bar";
-      try {
-        slide.addChart(
-          tipe,
-          b.data.datasets.map((d) => ({
-            name: d.label,
-            labels: b.data.labels,
-            values: d.data,
-          })),
-          opsiChart,
-        );
-      } catch {
-        slide.addText(teksBlok(b), { x: 0.6, y: 1.5, w: 12.13, h: 1 });
-      }
-    } else if (b.type === "image") {
-      // Foto tengah slide: tampil penuh + keterangan sumber/lisensi.
-      commit();
-      slide = pptx.addSlide({ masterName: masterIsi });
+    if (
+      b.type === "image" &&
+      !/^data:image\//i.test(b.src) &&
+      /^https?:\/\//i.test(b.src)
+    ) {
       const data = await urlKeDataUrl(b.src);
-      if (data) {
-        slide.addImage({ data, x: 0.6, y: 1.35, w: 12.13, h: 4.5, sizing: { type: "contain", w: 12.13, h: 4.5 } });
-        slide.addText(b.caption || b.alt || "", { x: 0.6, y: 5.95, w: 12.13, h: 0.5, fontSize: 10, italic: true, color: WARNA_ABU, align: "center" });
-      } else {
-        poin.push(teksBlok(b));
-      }
+      blocksSiap.push(data ? { ...b, src: data } : b);
     } else {
-      poin.push(teksBlok(b));
+      blocksSiap.push(b);
     }
   }
-  commit();
-  if (sumber.length > 0) {
-    const sSlide = pptx.addSlide({ masterName: masterIsi });
-    sSlide.addText("Sumber Dokumen", { x: 0.6, y: 0.35, w: 12.13, h: 0.8, fontSize: 28, bold: true, color: WARNA_TEKS });
-    sSlide.addText(sumber.join("\n"), { x: 0.6, y: 1.5, w: 12.13, h: 4.5, fontSize: 12, color: WARNA_TEKS });
+
+  // Sampul berfoto hanya untuk tema gelap: judul putih di atas foto tetap
+  // terbaca, sedangkan pada tema terang hasilnya justru berlawanan.
+  let gambarSampul: string | undefined;
+  const hero = blocksSiap.find((b) => b.type === "image");
+  if (tema.mode === "gelap" && hero?.type === "image") {
+    const data = await urlKeDataUrl(hero.src);
+    if (data) gambarSampul = data;
   }
-  const tutup = pptx.addSlide({ masterName: masterCover });
-  tutup.addText("Terima kasih", { x: 0.7, y: 2.2, w: 12.13, h: 1, fontSize: 40, bold: true, color: militer ? "FFFFFF" : WARNA_TEKS });
-  tutup.addShape("line", { x: 0.7, y: 3.35, w: 2.4, h: 0, line: { color: WARNA_UTAMA, width: 4 } });
-  tutup.addText(
-    militer
-      ? "Tindak lanjut: laksanakan rekomendasi sesuai tenggat — laporan DATA UJI, bukan dokumen operasi nyata."
-      : "Tindak lanjut: setujui tenggat susulan + tunjuk petugas pengganti.",
-    { x: 0.7, y: 3.6, w: 11.5, h: 0.8, fontSize: 13, color: militer ? "E6E1CF" : WARNA_ABU },
-  );
+
+  // Diagram Mermaid dirender lebih dulu: hasilnya PNG yang disisipkan ke
+  // slide. Bila gagal (diagram tidak sah / Mermaid tak termuat), peta kosong
+  // dan `susunDeckPpt` memakai fallback proses/teks.
+  const jumlahDiagram = blocksSiap.filter(
+    (b) => b.type === "diagram" && b.diagramType === "mermaid",
+  ).length;
+  if (jumlahDiagram > 0) {
+    onProgress?.(
+      `Merender ${jumlahDiagram} diagram Mermaid… (langkah ini butuh beberapa detik)`,
+    );
+  }
+  const gambarDiagram = await renderSemuaDiagram(blocksSiap, tema);
+  if (jumlahDiagram > 0) {
+    const jadi = Object.keys(gambarDiagram).length;
+    onProgress?.(
+      jadi === jumlahDiagram
+        ? `${jadi} diagram siap — menyusun slide…`
+        : `${jadi} dari ${jumlahDiagram} diagram berhasil dirender, sisanya memakai fallback…`,
+    );
+  }
+
+  const stat = susunDeckPpt(pptx, {
+    judul,
+    blocks: blocksSiap,
+    sumber,
+    tema,
+    ...(gambarSampul ? { gambarSampul } : {}),
+    gambarDiagram,
+    meta: {
+      organisasi: militer ? "DATA UJI · BUKAN DOKUMEN OPERASI NYATA" : "NitZ-909",
+      tanggal: tanggalIndonesia(),
+    },
+  });
+
   await pptx.writeFile({ fileName: `${judul}.pptx` });
-  return { pesan: militer ? "Berkas PPTX militer terunduh — tema olive-emas, sampul foto full-bleed, tabel & grafik native." : "Berkas PPTX terunduh — master & layout wide bisa dibuka di PowerPoint." };
+
+  const rincian = [
+    stat.kpi ? `${stat.kpi} slide KPI` : "",
+    stat.tabel ? `${stat.tabel} tabel` : "",
+    stat.grafik ? `${stat.grafik} grafik` : "",
+    stat.proses ? `${stat.proses} alur proses` : "",
+    stat.diagram ? `${stat.diagram} diagram` : "",
+    stat.gambar ? `${stat.gambar} gambar` : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  return {
+    pesan:
+      `Berkas PPTX terunduh — tema ${tema.nama}, ${stat.slideCount} slide` +
+      (rincian ? ` (${rincian})` : "") +
+      ". Tabel dan grafik native, bisa diubah langsung di PowerPoint.",
+  };
 }
 
 async function eksporDiagram(
@@ -539,6 +490,12 @@ export function bersihkanNamaBerkas(judul: string): string {
   return bersih || "Dokumen NitZ-909";
 }
 
+/** Opsi tambahan ekspor (saat ini hanya tema presentasi). */
+export interface OpsiEkspor {
+  /** Id tema dari `TEMA_PPT`; kosong = tema bawaan. */
+  temaPpt?: string;
+}
+
 /**
  * Ekspor dokumen dari kanvas ke berkas unduhan.
  * `modelLabel` dicatat untuk konteks; pembuatan konten AI menyusul.
@@ -550,6 +507,7 @@ export async function eksporDokumen(
   _modelLabel: string,
   sumber: string[] = [],
   onProgress?: (message: string) => void,
+  opsi: OpsiEkspor = {},
 ): Promise<HasilEkspor> {
   const nama = bersihkanNamaBerkas(judul);
   onProgress?.("Menyiapkan berkas...");
@@ -562,7 +520,7 @@ export async function eksporDokumen(
       return eksporWord(nama, blocks, sumber);
     case "pptx":
       onProgress?.("Membuat presentasi PowerPoint...");
-      return eksporPpt(nama, blocks, sumber);
+      return eksporPpt(nama, blocks, sumber, opsi.temaPpt, onProgress);
     case "xlsx":
       onProgress?.("Membuat spreadsheet Excel...");
       return eksporExcel(nama, blocks, sumber);

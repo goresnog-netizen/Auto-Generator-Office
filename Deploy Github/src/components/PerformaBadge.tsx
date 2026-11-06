@@ -56,14 +56,25 @@ export function PerformaBadge({ aktif = true }: PerformaBadgeProps) {
 
   if (!aktif) return null;
 
-  const warna =
-    kualitas === "baik"
-      ? "var(--success-text)"
-      : kualitas === "sedang"
-        ? "var(--warning-text)"
-        : "var(--danger-text)";
+  // Angka FPS bisa MENYESATKAN. Di lingkungan headless (CI, Chrome tanpa
+  // GPU) `requestAnimationFrame` tak dipanggil sesering di monitor asli,
+  // sehingga FPS-nya jadi 1-3 padahal aplikasi sama sekali tak lambat.
+  // Browser juga menurunkan rAF saat tab tak aktif.
+  //
+  // Jadi kalau FPS < 10, angka tak bisa dipercaya: tampilkan "?" dengan
+  // warna netral, bukan angka merah yang membuat user salahdiagnosis.
+  const takTerukur = fps !== null && fps < 10;
 
-  const label = fps === null ? "…" : `${fps}`;
+  const warna =
+    fps === null || takTerukur
+      ? "var(--muted)"
+      : kualitas === "baik"
+        ? "var(--success-text)"
+        : kualitas === "sedang"
+          ? "var(--warning-text)"
+          : "var(--danger-text)";
+
+  const label = fps === null ? "…" : takTerukur ? "?" : `${fps}`;
 
   return (
     <span
@@ -72,12 +83,16 @@ export function PerformaBadge({ aktif = true }: PerformaBadgeProps) {
       title={
         reduced
           ? "Animasi dimatikan karena pengaturan 'kurangi gerak' sistem aktif. Panel kaca tetap berfungsi."
-          : `FPS ${fps ?? 0} — kualitas render ${kualitas}. Layer blur: 47.`
+          : takTerukur
+            ? "FPS tak bisa diukur di lingkungan ini (tab tak aktif atau tanpa GPU). Nilai rendah di sini bukan tanda aplikasi lambat."
+            : `FPS ${fps} - kualitas render ${kualitas}.`
       }
       aria-label={
         fps === null
           ? "Mengukur FPS"
-          : `${fps} frame per detik, kualitas ${kualitas}`
+          : takTerukur
+            ? "FPS tak bisa diukur di lingkungan ini"
+            : `${fps} frame per detik, kualitas ${kualitas}`
       }
     >
       <span

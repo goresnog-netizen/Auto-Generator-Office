@@ -38,6 +38,41 @@ Sidebar kanan → panel **Auto-Generate**:
 
 Hasil langsung mengisi kanvas dan mengganti judul dokumen.
 
+### Dua cara menyusun
+
+| Mode | Cara kerja | Kapan dipakai |
+|---|---|---|
+| **Bertahap (lengkap)** — bawaan | 1 permintaan kerangka → 1 permintaan per bagian, dijalankan sampai habis | Dokumen panjang, deck banyak slide; tidak terpotong |
+| **Sekali jalan** | 1 permintaan untuk seluruh dokumen | Draft cepat, dokumen pendek |
+
+Pada mode bertahap, **setiap bagian langsung masuk kanvas** begitu selesai —
+slide muncul satu per satu, bukan menunggu seluruh dokumen. Bila satu bagian
+gagal (balasan tidak sah / kena batas kuota), bagian itu dilewati dan sisanya
+tetap dibuat; jumlahnya dilaporkan di pesan akhir.
+
+### Bahan dari berkas terlampir
+
+Berkas yang dilampirkan di panel **Sumber** ikut dikirim sebagai konteks:
+
+- `.txt`, `.md`, `.csv`, `.json` — isinya dibaca (maks. 2.000 karakter/berkas);
+- `.pdf`, `.docx`, `.xlsx` — **baru nama berkasnya** yang dipakai.
+
+Untuk bahan dari PDF/Word, tempel teksnya langsung di kolom **Permintaan**;
+itu jalur yang paling dapat diandalkan.
+
+### Judul dokumen
+
+- Mode **Ganti kanvas**: judul ditentukan oleh kerangka AI (judul template
+  lama tidak ikut terbawa).
+- Mode **Tambahkan**: judul dokumen yang ada dipertahankan.
+
+### Batas token
+
+Jalur Anthropic dulu dipaku di 1.024 token keluaran — cukup untuk satu
+paragraf, tetapi memotong laporan panjang tanpa error. Sekarang 4.096 token
+(bisa diturunkan pemanggil); generasi bertahap memakai 900 token untuk
+kerangka dan 2.600 token per bagian.
+
 ### Mode placement
 
 Toggle **Ganti kanvas / Tambahkan**:

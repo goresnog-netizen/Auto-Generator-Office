@@ -8,7 +8,7 @@
  * menerima objek opsi (bukan properti yang bisa di-set setelah pembuatan).
  */
 
-import {
+import type {
   DocumentGenerator,
   DocumentConfig,
   DocumentContent,

@@ -7,6 +7,7 @@
  */
 
 import type { ContentBlock, LaporanMetadata } from "../types";
+import { bangunPanduanBahasa } from "./bahasa";
 
 export type ProviderAI = "openai" | "anthropic" | "google" | "groq";
 
@@ -22,6 +23,15 @@ export interface OpsiCompletion {
   baseUrl?: string;
   pesan: PesanAI[];
   timeoutMs?: number;
+  /**
+   * Batas token keluaran.
+   *
+   * Dulu jalur Anthropic dipaku di 1024 token — cukup untuk satu paragraf,
+   * tetapi memotong laporan panjang di tengah kalimat tanpa error. Nilai
+   * bawaan sekarang 4096; pemanggil bertahap boleh menurunkannya agar satu
+   * bagian tidak menghabiskan kuota.
+   */
+  maxTokens?: number;
   /** Pencarian web (grounding) — hanya didukung provider Google. */
   cariWeb?: boolean;
 }
@@ -161,7 +171,7 @@ export async function generateCompletion(
         },
         body: JSON.stringify({
           model: opsi.model,
-          max_tokens: 1024,
+          max_tokens: opsi.maxTokens ?? 4096,
           ...(sistem ? { system: sistem } : {}),
           messages,
         }),
@@ -446,13 +456,15 @@ export async function generateDraft(opsi: OpsiDraf): Promise<ContentBlock[]> {
       {
         peran: "system",
         teks:
-          "Kamu penulis laporan profesional berbahasa Indonesia. " +
+          `${bangunPanduanBahasa({ ragam: "laporan" })}\n\n` +
           "Balas HANYA dengan JSON array (tanpa teks lain, tanpa penjelasan). " +
           'Setiap elemen array adalah objek blok dengan field "type" salah satu: ' +
           '"heading" (butuh "level" 1–3 dan "text"), ' +
           '"paragraph" (butuh "text"), ' +
           '"list" (butuh "ordered" boolean dan "items" array berisi objek {"text": "…"}). ' +
-          "Susun draf laporan lengkap: pendahuluan, isi bertahap, penutup.",
+          "Susun draf laporan lengkap: pendahuluan, isi bertahap, penutup. " +
+          "Pertahankan seluruh angka dan nama yang sudah ada di kanvas; " +
+          "jangan menambah angka yang tidak ada di sana.",
       },
       {
         peran: "user",

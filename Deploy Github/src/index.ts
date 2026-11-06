@@ -3,11 +3,16 @@
  * Main entry point
  */
 
-import { DocumentConfig, DocumentContent, ThemeTokens, GeneratorResult } from './types';
-import type { DocumentGenerator } from './types';
+import type {
+  DocumentConfig,
+  DocumentContent,
+  ThemeTokens,
+  GeneratorResult,
+} from './types/index.ts';
+import type { DocumentGenerator } from './types/index.ts';
 
 // Re-export types (termasuk DocumentGenerator & ValidationResult).
-export * from './types';
+export * from './types/index.ts';
 
 // Theme manager
 export class ThemeManager {

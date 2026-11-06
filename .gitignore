@@ -121,3 +121,12 @@ deckcraft/
 app_copy.tsx
 capture.cjs
 capture2.cjs
+# Artefak lokal milik sesi kerja (memori agen, temuan, screenshot uji).
+# Tidak dihapus dari disk — hanya tidak dikirim ke repo publik.
+.workbuddy-ai/
+.xena/
+testrun-dashboard/
+testrun-*/
+.tmp-*
+tmp-*
+*.pptx

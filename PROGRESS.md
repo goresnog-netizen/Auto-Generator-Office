@@ -710,3 +710,218 @@ belum pernah diuji end-to-end:
 Catatan: versi pertama skrip ini menganggap panel Form "tak bisa dibuka" -
 padahal `FormMode` BUKAN tab terpisah, ia panel yang selalu tampil di
 sidebar. Itu salah paham skrip, bukan bug aplikasi.
+---
+
+## Sesi 8 — Spesifikasi bahasa & sistem desain presentasi
+
+Dua modul baru menjawab satu keluhan: hasil ekspor sudah "ada isinya", tetapi
+belum selalu "siap diserahkan". Yang ditambahkan bukan template teks, tapi
+aturan yang bisa diuji.
+
+### `src/lib/bahasa.ts` — bahasa sebagai kontrak
+- 7 profil ragam (laporan, ringkasan, presentasi, proposal, analisis,
+  notulen, SOP) dengan struktur baku dan batas panjang masing-masing.
+- `bangunPanduanBahasa()` menyusun blok instruksi prompt: kalimat efektif,
+  tata tulis PUEBI (angka, rupiah, persen, satuan, tanggal, rentang), aturan
+  slide, larangan frasa klise & kata tidak baku, pola klaim → bukti →
+  implikasi.
+- `perbaikiEjaan()` / `rapikanEjaanBlok()` memperbaiki ejaan & spasi yang
+  tidak ambigu; URL, blok kode, dan diagram dilewati agar tidak rusak.
+- `periksaBahasa()` memeriksa 12 jenis temuan dan memberi skor 0–100 —
+  deterministik, tanpa AI, bisa dipakai sebagai gerbang mutu sebelum ekspor.
+
+### `src/lib/ppt-desain.ts` — deck, bukan tumpukan teks
+- 9 tema lengkap (palet, tipografi, pola latar, bentuk aksen): Swiss
+  Editorial, Navy Korporat, Sage Eksekutif, Grafik Teknologi, Gading
+  Konsultan, Azure Data, Krimson Berani, Olive Lapangan, Monokrom Cetak.
+- 11 layout: sampul, agenda, pemisah bagian, isi (1–2 kolom), KPI, tabel,
+  grafik native, proses (chevron), kutipan, gambar, kode, penutup.
+- Perencana `susunDeckPpt()` mengubah blok jadi slide dan memilih layout:
+  daftar berangka 3–4 butir otomatis jadi kartu KPI, daftar berurut pendek
+  jadi alur proses, tabel panjang dipecah 9 baris per slide.
+- `eksporDokumen()` menerima `{ temaPpt }`; panel Ekspor punya pemilih tema
+  dengan pratinjau palet, tersimpan di `localStorage`.
+
+### Perbaikan yang ikut terbawa
+- Judul dokumen tidak lagi terulang di slide pertama setelah sampul.
+- Kaki slide memakai judul dokumen (sebelumnya judul slide, sehingga judul
+  tampil dua kali di halaman yang sama).
+- Kicker bagian hanya muncul bila bagian punya nama sendiri.
+- Tabel pendek diletakkan di tengah area isi; kartu KPI diberi tinggi
+  proporsional agar tidak "melayang".
+
+### Verifikasi
+- `npx tsc --noEmit` + `tsc -p tsconfig.node.json` + `tsconfig.server.json`:
+  0 error.
+- `npx vitest run`: **122 tes lulus** (9 berkas), termasuk 25 tes baru untuk
+  bahasa dan desain deck.
+- `npm run build`: sukses.
+- Berkas `.pptx` contoh diperiksa langsung di dalam arsipnya: 9 slide, grafik
+  berisi `<c:ser>` + `numCache` (bukan bingkai kosong), tabel ada, dan **0
+  text box melewati batas kanvas**.
+- `npm run lint`: 0 temuan di berkas baru; 3 error lama tetap ada di
+  `DeckCraftStudio.tsx` dan `PerformaBadge.tsx` (di luar lingkup sesi ini).
+
+---
+
+## Sesi 8b — Mermaid jadi gambar & gradien latar
+
+Dua batasan yang sebelumnya hanya "diketahui" sekarang ditutup.
+
+### Mermaid → PNG (`src/lib/mermaid-gambar.ts`)
+- `renderMermaidPng()` merender Mermaid di browser, mengubah SVG menjadi PNG
+  2400 px, lalu menyisipkannya ke slide lewat `susunDeckPpt({ gambarDiagram })`.
+- Tiga jebakan yang ditemukan saat uji nyata:
+  1. **CSP menolak `blob:`** — `img-src 'self' data: https:` membuat
+     `URL.createObjectURL` gagal memuat gambar; kegagalannya hanya muncul
+     sebagai peringatan konsol. Solusi: data URL.
+  2. **`htmlLabels: true` (bawaan)** memakai `<foreignObject>`; Chrome tidak
+     menggambarnya saat SVG dimuat sebagai `Image` → kotak kosong tanpa
+     error. Solusi: `htmlLabels: false`.
+  3. **Tanpa `width`/`height` eksplisit**, `Image` bisa melaporkan 0×0.
+     Solusi: DOMParser menetapkan ukuran dari `viewBox`.
+- Warna diagram mengikuti tema (`themeVariables`): simpul = tint aksen, garis
+  = teksLembut, latar kanvas = latar slide.
+- Skala maksimum dinaikkan 3× → 8×: flowchart kecil (310 px) dulu hanya
+  930 px (~80 dpi). Karena sumbernya vektor, 8× tetap tajam.
+
+### Gradien latar (`ppt-desain.ts`)
+- `GRADIEN_TEMA` + `gradienLatar()`: kanvas 1280×720 → JPEG q=0,9 (≈11 KB),
+  di-cache per parameter. Tema `swiss`/`mono` tetap tanpa gradien.
+- **Ekstensi berkas**: pptxgenjs menamai latar `.png` bila hanya `data` yang
+  dikirim, padahal isinya JPEG. Ditambahkan `path: "preencoded.jpeg"` agar
+  ekstensi cocok — mencegah peringatan "perbaiki konten" di PowerPoint.
+- Slide bergambar/diagram memakai latar solid agar citra tidak "menempel"
+  di atas gradien.
+
+### Rasio gambar
+- `dimensiDataUrl()` membaca ukuran PNG/JPEG/GIF dari header data URL.
+  `sizing: contain` ternyata menulis `<a:stretch/>` (gambar gepeng) saat
+  x/y/w/h ikut diisi, jadi bingkai dihitung manual dan dipusatkan.
+
+### Verifikasi
+- Ekspor nyata lewat browser (Puppeteer + tema Navy + blok diagram):
+  - `ppt/media/`: 6 JPEG latar @11.530 B + 1 PNG diagram 57.472 B (2400×372);
+  - bingkai gambar di slide: 11,77 × 1,82 inci, terpusat di y=3,09 —
+    aspek 6,45:1 terjaga (sebelumnya diregangkan ke 4,05 inci);
+  - tanpa error/warning CSP.
+- `npx vitest run`: 117 tes lulus (2 tes baru: gradien & diagram);
+  typecheck 3 konfigurasi 0 error; `npm run build` sukses.
+
+### Sesi 8b — pemeriksaan kesesuaian alur
+
+Sebelum dianggap selesai, alur lama diuji ulang dengan perkakas proyek sendiri.
+
+- `node scripts/audit-gap-beser.mjs` → **33/33 lulus**. Audit sempat menangkap
+  satu regresi nyata: penulisan ulang `eksporPpt` membuat gambar remote tidak
+  lagi diunduh (hanya muncul sebagai keterangan). Diperbaiki dengan
+  menormalkan blok gambar ke data-URL sebelum deck disusun — perilaku jalur
+  lama pulih, dan pengecekan "dipakai di lebih dari 1 jalur ekspor" kembali
+  hijau (2 pemanggilan).
+- `node scripts/verifikasi-siring.mjs` → **10/10 lulus**: 5 tab galeri, panel
+  Form (21 field), 10 tombol ekspor (termasuk DeckCraft "Unduh PPTX/PDF/GIF"),
+  klik template membuka panel detail, tanpa error runtime.
+- `node scripts/verifikasi-fitur-baru.mjs` → seluruh pemeriksaan DeckCraft,
+  diagram, dan PDF lulus.
+- `npx vitest run` → **134 tes** (9 berkas, termasuk mirror) lulus;
+  typecheck 3 konfigurasi 0 error; `npm run build` sukses.
+
+Catatan lingkungan: `verifikasi-siring` default ke `127.0.0.1`, sedangkan Vite
+di mesin ini hanya mendengarkan `localhost` (IPv6). Jalankan dengan
+`URL=http://localhost:5180/` bila server lokal dipakai.
+- Tambahan sesi ini: batas waktu 10 detik per diagram (Mermaid tak punya
+  timeout internal; satu diagram cacat tidak boleh menggantung ekspor) dan
+  pesan progres "Merender N diagram Mermaid…" pada panel ekspor.
+- Tambahan sesi ini: batas waktu 10 detik per diagram (Mermaid tak punya
+  timeout internal; satu diagram cacat tidak boleh menggantung ekspor) dan
+  pesan progres "Merender N diagram Mermaid…" pada panel ekspor.
+
+---
+
+## Sesi 9 — Bahan → deck lengkap, bertahap sampai selesai
+
+Keluhan: "kalau saya kasih bahan, apakah langsung jadi deck lengkap?"
+Jawabannya waktu itu: **belum**. Tiga sebab, semuanya diperbaiki di sesi ini.
+
+### 1. Bahan tidak pernah sampai ke AI
+Berkas di panel Sumber hanya dipakai sebagai NAMA di halaman sumber; isinya
+tidak dikirim ke generator. Sekarang `ambilBahan={konteksSumber}` diteruskan
+ke Auto-Generate, dan `generateBertahap` menyertakannya di prompt kerangka
+maupun prompt tiap bagian (dipotong 6.000 karakter).
+
+### 2. Satu permintaan bisa terpotong
+Jalur Anthropic dipaku di `max_tokens: 1024` — cukup untuk satu paragraf,
+tetapi memotong laporan panjang tanpa error. Sekarang `maxTokens` bisa diatur,
+bawaan 4.096.
+
+### 3. Tidak ada cara "lanjut sampai selesai"
+Ditambahkan `generateBertahap()`: satu permintaan kerangka (900 token), lalu
+satu permintaan per bagian (2.600 token). Setiap bagian yang selesai langsung
+dikirim ke kanvas lewat `onBagian` — slide muncul satu per satu. Bagian yang
+gagal dilewati (`bagianGagal`), sisanya tetap jadi.
+
+UI: pilihan **Bertahap (lengkap)** / **Sekali jalan**, bawaan bertahap.
+
+### Ikut diperbaiki
+- Mode "Ganti kanvas" tidak lagi mewarisi judul template lama — judul
+  ditentukan kerangka. Mode "Tambahkan" tetap mempertahankan judul.
+- Bagian pertama yang BERHASIL (bukan selalu indeks 0) yang mengganti kanvas;
+  kalau bagian 0 gagal, bagian 1 tidak menempel di atas dokumen lama.
+- Slide tabel/grafik setelah slide isi pada bagian yang sama diberi judul
+  "(lanjutan)", tidak lagi dua slide berjudul sama.
+
+### Verifikasi
+- Unit test baru `auto-generate-bertahap.test.ts` (7 tes): kerangka, judul per
+  bagian, toleransi kegagalan, bahan terkirim, galat bila semua gagal.
+- E2E dengan server AI tiruan (OpenAI-compatible di localhost:5999):
+  blok kanvas tumbuh **3 → 9 → 13**, judul jadi "Laporan Uji Bertahap",
+  status "Selesai: 9 blok (3 heading, 2 daftar, 1 tabel) · mutu bahasa 100/100",
+  lalu ekspor PPT menghasilkan **7 slide** (sampul, agenda 3 bagian, 3 slide
+  isi + 1 tabel lanjutan, penutup), tanpa error runtime.
+- `npx vitest run` → 148 tes (11 berkas) lulus; typecheck 3 konfigurasi 0 error;
+  `npm run build` sukses; `audit-gap-beser` 33/33; `verifikasi-siring` 10/10.
+
+---
+
+## Sesi 9 — Bahan → deck lengkap, bertahap sampai selesai
+
+Keluhan: "kalau saya kasih bahan, apakah langsung jadi deck lengkap?"
+Jawabannya waktu itu: **belum**. Tiga sebab, semuanya diperbaiki di sesi ini.
+
+### 1. Bahan tidak pernah sampai ke AI
+Berkas di panel Sumber hanya dipakai sebagai NAMA di halaman sumber; isinya
+tidak dikirim ke generator. Sekarang `ambilBahan={konteksSumber}` diteruskan
+ke Auto-Generate, dan `generateBertahap` menyertakannya di prompt kerangka
+maupun prompt tiap bagian (dipotong 6.000 karakter).
+
+### 2. Satu permintaan bisa terpotong
+Jalur Anthropic dipaku di `max_tokens: 1024` — cukup untuk satu paragraf,
+tetapi memotong laporan panjang tanpa error. Sekarang `maxTokens` bisa diatur,
+bawaan 4.096.
+
+### 3. Tidak ada cara "lanjut sampai selesai"
+Ditambahkan `generateBertahap()`: satu permintaan kerangka (900 token), lalu
+satu permintaan per bagian (2.600 token). Setiap bagian yang selesai langsung
+dikirim ke kanvas lewat `onBagian` — slide muncul satu per satu. Bagian yang
+gagal dilewati (`bagianGagal`), sisanya tetap jadi.
+
+UI: pilihan **Bertahap (lengkap)** / **Sekali jalan**, bawaan bertahap.
+
+### Ikut diperbaiki
+- Mode "Ganti kanvas" tidak lagi mewarisi judul template lama — judul
+  ditentukan kerangka. Mode "Tambahkan" tetap mempertahankan judul.
+- Bagian pertama yang BERHASIL (bukan selalu indeks 0) yang mengganti kanvas;
+  kalau bagian 0 gagal, bagian 1 tidak menempel di atas dokumen lama.
+- Slide tabel/grafik setelah slide isi pada bagian yang sama diberi judul
+  "(lanjutan)", tidak lagi dua slide berjudul sama.
+
+### Verifikasi
+- Unit test baru `auto-generate-bertahap.test.ts` (7 tes): kerangka, judul per
+  bagian, toleransi kegagalan, bahan terkirim, galat bila semua gagal.
+- E2E dengan server AI tiruan (OpenAI-compatible di localhost:5999):
+  blok kanvas tumbuh **3 → 9 → 13**, judul jadi "Laporan Uji Bertahap",
+  status "Selesai: 9 blok (3 heading, 2 daftar, 1 tabel) · mutu bahasa 100/100",
+  lalu ekspor PPT menghasilkan **7 slide** (sampul, agenda 3 bagian, 3 slide
+  isi + 1 tabel lanjutan, penutup), tanpa error runtime.
+- `npx vitest run` → 148 tes (11 berkas) lulus; typecheck 3 konfigurasi 0 error;
+  `npm run build` sukses; `audit-gap-beser` 33/33; `verifikasi-siring` 10/10.

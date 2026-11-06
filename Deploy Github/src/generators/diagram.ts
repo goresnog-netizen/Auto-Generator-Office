@@ -3,7 +3,11 @@
  * Generates diagrams using Mermaid
  */
 
-import {
+// Hanya TIPE yang diimpor. Kalau nilai diimpor sebagai nilai, Node ESM
+// mengharuskan modul itu benar-benar mengekspor simbol runtime-nya -
+// dan `src/types/index.ts` hanya berisi type, jadi import-nya gagal:
+// "does not provide an export named 'ChartBlock'".
+import type {
   DocumentGenerator,
   DocumentConfig,
   DocumentContent,
@@ -11,7 +15,7 @@ import {
   ValidationResult,
   GeneratorOptions,
   DiagramBlock,
-  ChartBlock
+  ChartBlock,
 } from '../types/index.ts';
 
 import { promisify } from 'util';

@@ -24,6 +24,12 @@ import type {
 } from "../types";
 import { generateCompletion, type ProviderAI } from "./ai";
 import { getPersona, type PersonaId } from "../data/personas";
+import {
+  bangunPanduanBahasa,
+  periksaBahasa,
+  rapikanEjaanBlok,
+  type LaporanBahasa,
+} from "./bahasa";
 
 /**
  * `Omit` bawaan tidak berlaku untuk union: ia hanya melompat properti dari
@@ -93,6 +99,8 @@ export interface HasilOtomatis {
     /** Blok yang dibuang karena tidak valid. */
     dibuang: number;
   };
+  /** Mutu bahasa hasil generate (skor 0–100 + temuan). */
+  kualitas: LaporanBahasa;
 }
 
 /** Batas aman: model bisa membanjir; potong agar tidak menguras kuota. */
@@ -441,9 +449,18 @@ export function parseBalasanOtomatis(
   return { blocks, dibuang, judul: judulDariAI };
 }
 
-/** Susun system prompt untuk auto-generate. */
+/**
+ * Susun system prompt untuk auto-generate.
+ *
+ * Dua lapis sengaja dipisah:
+ *  - `bangunPanduanBahasa()` mengatur MUTU TEKS (ragam, kalimat, tata tulis);
+ *  - blok di bawah mengatur BENTUK KELUARAN (JSON + skema blok).
+ * Pemisahan ini membuat aturan bahasa bisa diuji dan diubah tanpa menyentuh
+ * kontrak keluaran.
+ */
 function systemPrompt(opsi: OpsiOtomatis): string {
-  const gaya = PETA_GAYA[opsi.gaya ?? "laporan"];
+  const gayaId = opsi.gaya ?? "laporan";
+  const gaya = PETA_GAYA[gayaId];
   const persona = opsi.persona ? getPersona(opsi.persona) : null;
   const jumlah = Math.min(Math.max(opsi.jumlahBagian ?? 5, 2), 12);
   const rich = opsi.allowRich !== false;
@@ -460,17 +477,20 @@ function systemPrompt(opsi: OpsiOtomatis): string {
       : "") +
     '- "divider": tanpa field tambahan';
 
-  const gayaOrang =
-    persona
-      ? ` Audiens: ${persona.nama}. ${persona.contoh[0] ?? ""}`.trim()
-      : "";
+  const panduan = bangunPanduanBahasa({
+    ragam: gayaId,
+    untukSlide: gayaId === "presentasi",
+    ...(persona
+      ? { audiens: `${persona.nama}${persona.contoh[0] ? ` — ${persona.contoh[0]}` : ""}`.slice(0, 200) }
+      : {}),
+  });
 
   return (
-    `Kamu penulis dokumen profesional berbahasa Indonesia yang terampil. ` +
     `Balas HANYA dengan JSON (tanpa teks lain, tanpa penjelasan, tanpa markdown fence). ` +
-    `Boleh berupa array blok langsung, atau objek {"title": "…", "blocks": [...]}. ${skema}. ` +
-    `Gunakan gaya: ${gaya}. ${gayaOrang} ` +
-    `Buat ${jumlah} bagian/bagian utama. ` +
+    `Boleh berupa array blok langsung, atau objek {"title": "…", "blocks": [...]}.\n\n` +
+    `${panduan}\n\n` +
+    `SKEMA KELUARAN:\n${skema}\n\n` +
+    `GAYA DOKUMEN: ${gaya}. Buat ${jumlah} bagian utama.\n` +
     (rich
       ? `Sisipkan minimal satu tabel atau grafik bila data mendukung — jangan mengarang angka tanpa menyebut bahwa itu ilustrasi. `
       : "") +
@@ -486,6 +506,7 @@ export async function generateOtomatis(
   opsi: OpsiOtomatis,
 ): Promise<HasilOtomatis> {
   const allowRich = opsi.allowRich !== false;
+  const gayaId = opsi.gaya ?? "laporan";
 
   const pesan = [
     {
@@ -520,11 +541,15 @@ export async function generateOtomatis(
     );
   }
 
-  // Beri id unik pada setiap blok.
-  const denganId = blocks.map((blok, i) => ({
-    ...blok,
-    id: `auto-${Date.now()}-${i}`,
-  })) as ContentBlock[];
+  // Beri id unik pada setiap blok, lalu rapikan ejaan yang jelas salah.
+  // Perbaikan di sini konservatif (hanya kata baku & spasi) — pilihan kata
+  // tetap milik model, dan blok kode/diagram tidak disentuh.
+  const denganId = rapikanEjaanBlok(
+    blocks.map((blok, i) => ({
+      ...blok,
+      id: `auto-${Date.now()}-${i}`,
+    })) as ContentBlock[],
+  );
 
   // Judul: pakai yang diminta, atau judul dari AI, atau heading level 1
   // pertama, atau default.
@@ -548,5 +573,301 @@ export async function generateOtomatis(
     dibuang,
   };
 
-  return { blocks: denganId, judul, statistik };
+  return {
+    blocks: denganId,
+    judul,
+    statistik,
+    kualitas: periksaBahasa(denganId, {
+      ragam: gayaId,
+      untukSlide: gayaId === "presentasi",
+    }),
+  };
+}
+
+/* =====================================================================
+ * GENERASI BERTAHAP — kerangka dulu, lalu satu bagian per permintaan
+ * ===================================================================== */
+
+/**
+ * Mengapa bertahap?
+ *
+ * Satu permintaan untuk seluruh laporan selalu berisiko: model kehabisan
+ * token di tengah bagian keempat, dan tidak ada cara melanjutkan tanpa
+ * mengulang dari awal. Dengan kerangka + satu bagian per permintaan:
+ *  - setiap permintaan kecil, jadi tidak terpotong;
+ *  - bagian yang gagal bisa dilewati, sisanya tetap jadi;
+ *  - slide muncul satu per satu, bukan menunggu semuanya selesai.
+ */
+export interface BagianKerangka {
+  judul: string;
+  poin: string[];
+}
+
+export interface KerangkaDokumen {
+  judul: string;
+  bagian: BagianKerangka[];
+}
+
+/** Bersihkan pagar kode dan parse JSON kerangka. */
+export function parseKerangka(
+  mentah: string,
+  maksBagian: number,
+): KerangkaDokumen {
+  const bersih = mentah
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/, "")
+    .trim();
+
+  let data: unknown;
+  try {
+    data = JSON.parse(bersih);
+  } catch {
+    return { judul: "", bagian: [] };
+  }
+
+  let judul = "";
+  let daftar: unknown[] = [];
+  if (Array.isArray(data)) {
+    daftar = data;
+  } else if (data && typeof data === "object") {
+    const o = data as Record<string, unknown>;
+    judul = bersihkanTeks(ambilField(o, ["judul", "title", "name"]));
+    const arr = ambilField(o, ["bagian", "sections", "outline", "isi"]);
+    if (Array.isArray(arr)) daftar = arr;
+  }
+
+  const bagian: BagianKerangka[] = [];
+  const sudahAda = new Set<string>();
+  for (const item of daftar) {
+    if (bagian.length >= maksBagian) break;
+    const o =
+      typeof item === "string"
+        ? { judul: item }
+        : (item as Record<string, unknown> | null);
+    if (!o || typeof o !== "object") continue;
+    const nama = bersihkanTeks(ambilField(o, ["judul", "title", "nama", "name"]));
+    if (!nama || sudahAda.has(nama.toLowerCase())) continue;
+    sudahAda.add(nama.toLowerCase());
+    const poinRaw = ambilField(o, ["poin", "points", "butir", "items"]);
+    const poin = Array.isArray(poinRaw)
+      ? poinRaw.map((p) => bersihkanTeks(p)).filter(Boolean).slice(0, 5)
+      : [];
+    bagian.push({ judul: nama, poin });
+  }
+
+  return { judul, bagian };
+}
+
+export interface OpsiBertahap extends OpsiOtomatis {
+  /** Teks bahan dari berkas/tautan yang dilampirkan pengguna. */
+  bahan?: string;
+  /** Dipanggil setiap bagian selesai — untuk menaruh slide ke kanvas. */
+  onBagian?: (
+    blocks: ContentBlock[],
+    info: { indeks: number; total: number; judul: string },
+  ) => void;
+  /** Pesan kemajuan yang bisa langsung ditampilkan di UI. */
+  onKemajuan?: (pesan: string) => void;
+}
+
+export interface HasilBertahap extends HasilOtomatis {
+  kerangka: BagianKerangka[];
+  /** Indeks bagian yang gagal (0-based); sisanya tetap dihasilkan. */
+  bagianGagal: number[];
+}
+
+/** Instruksi khusus menulis satu bagian. */
+function promptBagian(
+  opsi: OpsiOtomatis,
+  gayaId: GayaOtomatis,
+  bagian: BagianKerangka,
+  indeks: number,
+  total: number,
+  bahan: string,
+): { sistem: string; pengguna: string } {
+  const sistem =
+    `${bangunPanduanBahasa({
+      ragam: gayaId,
+      untukSlide: gayaId === "presentasi",
+    })}\n\n` +
+    `Kamu menulis SATU bagian dari dokumen yang lebih besar, bukan seluruhnya. ` +
+    `Balas HANYA JSON array blok (tanpa teks lain, tanpa markdown fence). ` +
+    `Jangan memakai heading level 1 atau 2 — judul bagian sudah ditetapkan. ` +
+    `Skema blok: "heading" (level 3–4), "paragraph", "list", "table", "chart", "diagram". ` +
+    `Target 3–6 blok untuk bagian ini.`;
+
+  const pengguna =
+    `Judul dokumen: ${opsi.judul || "tentukan dari permintaan"}.\n` +
+    `Bagian ${indeks + 1} dari ${total}: "${bagian.judul}".\n` +
+    (bagian.poin.length > 0
+      ? `Poin yang wajib dibahas: ${bagian.poin.join("; ")}.\n`
+      : "") +
+    (bahan ? `Bahan dari pengguna:/n${bahan}/n` : "") +
+    `Permintaan awal: ${opsi.prompt}\n\n` +
+    `Tulis isi bagian ini sekarang.`;
+
+  return { sistem, pengguna };
+}
+
+/** Minta kerangka dokumen (satu permintaan kecil). */
+async function mintaKerangka(
+  opsi: OpsiOtomatis,
+  gayaId: GayaOtomatis,
+  jumlah: number,
+  bahan: string,
+): Promise<KerangkaDokumen> {
+  const mentah = await generateCompletion({
+    provider: opsi.provider,
+    model: opsi.model,
+    apiKey: opsi.apiKey,
+    ...(opsi.baseUrl ? { baseUrl: opsi.baseUrl } : {}),
+    ...(opsi.timeoutMs ? { timeoutMs: opsi.timeoutMs } : {}),
+    maxTokens: 900,
+    pesan: [
+      {
+        peran: "system",
+        teks:
+          `${bangunPanduanBahasa({ ragam: gayaId, ringkas: true })}\n\n` +
+          `Kamu menyusun KERANGKA dokumen, bukan isinya. ` +
+          `Balas HANYA JSON: {"judul": "…", "bagian": [{"judul": "…", "poin": ["…", "…"]}]}. ` +
+          `Tepat ${jumlah} bagian, urut dari pembuka ke penutup. ` +
+          `Setiap bagian 2–4 poin singkat.`,
+      },
+      {
+        peran: "user",
+        teks:
+          `Permintaan: ${opsi.prompt}\n` +
+          (bahan ? `\nBahan dari pengguna:/n${bahan}/n` : "") +
+          `\nSusun kerangkanya sekarang.`,
+      },
+    ],
+  });
+
+  const kerangka = parseKerangka(mentah, jumlah);
+  if (kerangka.bagian.length === 0) {
+    throw new Error(
+      "AI tidak mengembalikan kerangka yang bisa dipakai. Coba permintaan yang lebih spesifik.",
+    );
+  }
+  return kerangka;
+}
+
+/**
+ * Hasilkan dokumen lengkap secara bertahap: kerangka → tiap bagian.
+ * Bagian yang gagal dilewati dan dilaporkan, bukan menghentikan semuanya.
+ */
+export async function generateBertahap(
+  opsi: OpsiBertahap,
+): Promise<HasilBertahap> {
+  const gayaId = opsi.gaya ?? "laporan";
+  const allowRich = opsi.allowRich !== false;
+  const jumlah = Math.min(Math.max(opsi.jumlahBagian ?? 5, 2), 12);
+  // Bahan dipotong: cukup untuk konteks, tidak membanjiri prompt.
+  const bahan = (opsi.bahan ?? "").trim().slice(0, 6000);
+
+  opsi.onKemajuan?.("Menyusun kerangka dokumen…");
+  const kerangka = await mintaKerangka(opsi, gayaId, jumlah, bahan);
+  opsi.onKemajuan?.(
+    `Kerangka siap: ${kerangka.bagian.length} bagian. Mulai menulis…`,
+  );
+
+  const semua: ContentBlock[] = [];
+  const bagianGagal: number[] = [];
+
+  for (let i = 0; i < kerangka.bagian.length; i += 1) {
+    const bagian = kerangka.bagian[i];
+    opsi.onKemajuan?.(
+      `Bagian ${i + 1}/${kerangka.bagian.length}: ${bagian.judul}…`,
+    );
+
+    try {
+      const { sistem, pengguna } = promptBagian(
+        opsi,
+        gayaId,
+        bagian,
+        i,
+        kerangka.bagian.length,
+        bahan,
+      );
+      const mentah = await generateCompletion({
+        provider: opsi.provider,
+        model: opsi.model,
+        apiKey: opsi.apiKey,
+        ...(opsi.baseUrl ? { baseUrl: opsi.baseUrl } : {}),
+        ...(opsi.timeoutMs ? { timeoutMs: opsi.timeoutMs } : {}),
+        maxTokens: 2600,
+        pesan: [
+          { peran: "system", teks: sistem },
+          { peran: "user", teks: pengguna },
+        ],
+      });
+
+      const { blocks } = parseBalasanOtomatis(mentah, { allowRich });
+      if (blocks.length === 0) throw new Error("bagian kosong");
+
+      const berId = blocks.map((blok, j) => ({
+        ...blok,
+        id: `auto-${Date.now().toString(36)}-${i}-${j}`,
+      })) as ContentBlock[];
+
+      // Judul bagian ditambahkan di sini, bukan oleh model: menjamin
+      // hierarki slide tetap satu bagian = satu judul.
+      const bagianBlok: ContentBlock[] = [
+        {
+          id: `auto-${Date.now().toString(36)}-${i}-judul`,
+          type: "heading",
+          level: 2,
+          text: bagian.judul,
+        } as ContentBlock,
+        ...rapikanEjaanBlok(berId),
+      ];
+
+      semua.push(...bagianBlok);
+      opsi.onBagian?.(bagianBlok, {
+        indeks: i,
+        total: kerangka.bagian.length,
+        judul: bagian.judul,
+      });
+    } catch {
+      // Satu bagian gagal tidak boleh membatalkan seluruh dokumen.
+      bagianGagal.push(i);
+    }
+  }
+
+  if (semua.length === 0) {
+    throw new Error(
+      "Tidak ada bagian yang berhasil ditulis. Periksa kunci API lalu coba lagi.",
+    );
+  }
+
+  const judul =
+    opsi.judul?.trim() ||
+    kerangka.judul.trim() ||
+    (semua.find((b) => b.type === "heading" && b.level === 2) as
+      | { text: string }
+      | undefined)?.text ||
+    "Dokumen NitZ-909";
+
+  const statistik = {
+    totalBlok: semua.length,
+    heading: semua.filter((b) => b.type === "heading").length,
+    tabel: semua.filter((b) => b.type === "table").length,
+    grafik: semua.filter((b) => b.type === "chart").length,
+    diagram: semua.filter((b) => b.type === "diagram").length,
+    daftar: semua.filter((b) => b.type === "list").length,
+    dibuang: 0,
+  };
+
+  return {
+    blocks: semua,
+    judul,
+    statistik,
+    kualitas: periksaBahasa(semua, {
+      ragam: gayaId,
+      untukSlide: gayaId === "presentasi",
+    }),
+    kerangka: kerangka.bagian,
+    bagianGagal,
+  };
 }

@@ -18,7 +18,7 @@
 import path from "node:path";
 import PptxGenJS from "pptxgenjs";
 
-import type { DocumentGenerator, ValidationResult } from "../index";
+import type { DocumentGenerator, ValidationResult } from "../types/index.ts";
 import type {
   ChartBlock,
   ContentBlock,
@@ -109,32 +109,42 @@ export class PPTXGenerator implements DocumentGenerator {
 
       const dipakai = this.susunDeck(pptx, config, content.blocks);
 
-      // Nama berkas: judul dibersihkan dari karakter terlarang Windows.
-      const nama = this.namaBerkas(config.title);
+      // PptxGenJS bisa menulis langsung ke berkas, tapi dua masalah:
+      //  1. `buffer` selalu `undefined` - sedangkan generator lain (word,
+      //     xlsx, pdf) mengembalikan buffer. Pemanggil yang tak selalu
+      //     punya `outputPath` jadi tak dapat buffer sama sekali.
+      //  2. Berkas hasil tulis ke folder kerja SEWAKTU-WAKTU, mencemari
+      //     direktori proyek tanpa diminta.
+      //
+      // Solusinya: tulis ke buffer dulu (writeFile tanpa `fileName`),
+      // lalu simpan ke disk HANYA kalau `outputPath` memang diberikan.
+      const buffer = (await pptx.write({
+        outputType: "nodebuffer",
+      })) as Buffer;
+
       const outputPath = this.options.outputPath
         ? path.resolve(this.options.outputPath)
-        : path.resolve(process.cwd(), nama);
+        : undefined;
 
-      await pptx.writeFile({ fileName: outputPath });
-
-      // Pastikan benar-benar ada — jangan percaya promise tanpa cek.
-      const stat = await import("node:fs/promises").then((fs) =>
-        fs.stat(outputPath),
-      );
+      if (outputPath) {
+        const fs = await import("node:fs/promises");
+        await fs.writeFile(outputPath, buffer);
+      }
 
       return {
         success: true,
-        outputPath,
-        buffer: undefined,
+        ...(outputPath ? { outputPath } : {}),
+        buffer,
         metadata: {
           slideCount: dipakai.slideCount,
           blocks: content.blocks.length,
           bulletTerdrop: dipakai.bulletTerdrop,
           tabel: dipakai.tabel,
+          kode: dipakai.kode,
           grafik: dipakai.grafik,
           gambar: dipakai.gambar,
           diagram: dipakai.diagram,
-          bytes: stat.size,
+          bytes: buffer.length,
         },
       };
     } catch (error) {
@@ -146,17 +156,6 @@ export class PPTXGenerator implements DocumentGenerator {
             : "Unknown error generating PPTX document",
       };
     }
-  }
-
-  /** Nama berkas aman dari karakter terlarang Windows. */
-  private namaBerkas(judul: string): string {
-    const bersih = judul
-      .replace(/[\\/:*?"<>|]+/g, "-")
-      .replace(/\s+/g, " ")
-      .replace(/[. ]+$/, "")
-      .slice(0, 100)
-      .trim();
-    return `${bersih || "Presentasi"}.pptx`;
   }
 
   /**
@@ -172,6 +171,7 @@ export class PPTXGenerator implements DocumentGenerator {
     bulletTerdrop: number;
     tabel: number;
     grafik: number;
+    kode: number;
     gambar: number;
     diagram: number;
   } {
@@ -180,6 +180,7 @@ export class PPTXGenerator implements DocumentGenerator {
       bulletTerdrop: 0,
       tabel: 0,
       grafik: 0,
+      kode: 0,
       gambar: 0,
       diagram: 0,
     };
@@ -315,7 +316,38 @@ export class PPTXGenerator implements DocumentGenerator {
         }
 
         case "code": {
-          bulletTertunda.push(blok.code);
+          // Blok kode = text box monospace dengan latar, BUKAN bullet.
+          //
+          // Sebelumnya kode masuk ke `bulletTertunda`, jadi ia dirender
+          // dengan font body + bullet - persis seperti paragraf biasa.
+          // Ini satu-satunya tempat font monospace muncul di PPTX Node,
+          // jadi blok kode tak pernah terlihat sebagai kode.
+          const kode = blok.code;
+          const baris = kode.split("\n");
+          gambarBullet();
+          slide.addText(
+            baris.map((b) => ({
+              text: b,
+              options: {
+                fontFace: "Consolas",
+                fontSize: 12,
+                color: "111827",
+                breakLine: true,
+              },
+            })),
+            {
+              x: 0.6,
+              y: 1.5,
+              w: 12.13,
+              h: Math.min(baris.length * 0.28 + 0.2, 4.6),
+              fill: { color: "EEF0F3" },
+              line: { color: "C8CDD4", width: 1 },
+              fontFace: "Consolas",
+              fontSize: 12,
+              color: "111827",
+            },
+          );
+          stat.kode++;
           break;
         }
 

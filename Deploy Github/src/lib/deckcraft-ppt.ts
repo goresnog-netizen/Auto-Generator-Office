@@ -101,29 +101,40 @@ export const FONT_KODE_CADANGAN = ["Courier New", "Menlo", "Courier"];
  * kode sedikit lebih kecil karena lebih rapat, tapi 13 pt terlalu kecil untuk
  * dibaca dari jauh. 16 pt adalah titik tengah yang terbaca di proyektor.
  */
-export const UKURAN_FONT_KODE = 16;
+export const UKURAN_FONT_KODE = 18;
 
 /**
  * Lebar industri (dalam karakter) untuk satu baris kode.
  *
  * Font monospace punya lebar karakter tetap, jadi lebar baris bisa dihitung
- * dari jumlah karakter. 0,62 em per karakter untuk Courier New/Liberation
- * Mono pada 16 pt ≈ 9,9 pt per karakter.
+ * dari jumlah karakter. 0,62 em per karakter untuk Liberation Mono pada
+ * 18 pt ≈ 11,2 pt per karakter.
  */
-const LEBAR_KARAKTER_PT = 9.9;
+const LEBAR_KARAKTER_PT = 11.2;
 
 /** Lebar minimum & maksimum text box kode (pt). */
-const LEBAR_KODE_MIN = 320;
+const LEBAR_KODE_MIN = 360;
 const LEBAR_KODE_MAX = KONTEN_W;
 
-/** Warna teks blok kode (gelap, tak bergantung tema). */
+/**
+ * Warna teks blok kode.
+ *
+ * gelap di atas latar terang - kontras 15,8:1, jauh di atas ambang AA
+ * (4,5:1) untuk teks biasa dan 7:1 untuk teks besar.
+ */
 export const WARNA_TEKST_KODE = "111827";
 
-/** Warna latar blok kode (terang, tak bergantung tema). */
-export const WARNA_LATAR_KODE = "F4F5F7";
+/**
+ * Warna latar blok kode.
+ *
+ * Abu-abu muda, bukan putih murni:latar putih bikin blok kode "terbenam"
+ * di slide yang latar putihnya sama, sedangkan abu-abu membuatnya terbaca
+ * sebagai blok terpisah tanpa harus garis tebal.
+ */
+export const WARNA_LATAR_KODE = "EEF0F3";
 
 /** Garis tepi blok kode. */
-export const WARNA_GARIS_KODE = "D7DBE0";
+export const WARNA_GARIS_KODE = "C8CDD4";
 
 /**
  * Perintah DeckCraft + slide tempat perintah itu berlaku.
@@ -314,7 +325,9 @@ export function blokKePerintah(
   const tambahKode = (b: CodeBlock) => {
     if (slideBaru.length === 0) mulaiSlide(judulMenunggu);
     const baris = b.code.split("\n");
-    const tinggi = Math.min(Math.max(baris.length * 22 + 24, 60), 320);
+    // Tinggi mengikuti jumlah baris, dengan ruang extra supaya blok tak
+    // terlihat "penuh" di slide. Batas atas 340 pt (63% tinggi slide).
+    const tinggi = Math.min(Math.max(baris.length * 26 + 28, 72), 340);
     // Lebar mengikuti baris terpanjang: text box selebar slide untuk kode
     // 3 baris pendek terlihat rapi kosong. Karakter monospace punya lebar
     // tetap, jadi ini bisa dihitung.
@@ -322,7 +335,7 @@ export function blokKePerintah(
       (maks, b2) => Math.max(maks, b2.length),
       0,
     );
-    const lebarIdeal = karakterTerpanjang * LEBAR_KARAKTER_PT + 32;
+    const lebarIdeal = karakterTerpanjang * LEBAR_KARAKTER_PT + 36;
     const lebar = Math.min(Math.max(lebarIdeal, LEBAR_KODE_MIN), LEBAR_KODE_MAX);
     slideBaru.push({
       command: "insert.textBox",
@@ -338,6 +351,12 @@ export function blokKePerintah(
     slideBaru.push({
       command: "format.size",
       params: { size: UKURAN_FONT_KODE },
+    });
+    // Warna teks eksplisit: tanpa ini, teks kode memakai warna teks tema,
+    // yang di slide terang bisa jadi terlalu terang di atas latar abu-abu.
+    slideBaru.push({
+      command: "format.color",
+      params: { color: WARNA_TEKST_KODE },
     });
     slideBaru.push({
       command: "shape.fill",

@@ -10,10 +10,12 @@ import { Button, Select, Textarea } from "./ui";
 import { Ikon } from "./Ikon";
 import { PERSONAS, type PersonaId } from "../data/personas";
 import {
+  generateBertahap,
   generateOtomatis,
   type GayaOtomatis,
   type HasilOtomatis,
 } from "../lib/auto-generate";
+import type { ContentBlock } from "../types";
 import type { ProviderAI } from "../lib/ai";
 
 const GAYA: { value: GayaOtomatis; label: string }[] = [
@@ -33,7 +35,23 @@ export interface AutoGenerateProps {
   /** Judul dokumen saat ini (dipakai sebagai konteks). */
   judul: string;
   /** Dipanggil dengan hasil generate; biasanya mengisi kanvas. */
-  onHasil: (hasil: HasilOtomatis) => void;
+  onHasil: (
+    hasil: HasilOtomatis,
+    opsi?: { sudahDiKanvas?: boolean },
+  ) => void;
+  /**
+   * Teks bahan (berkas/tautan terlampir) yang dipakai sebagai konteks.
+   * Dibaca saat tombol ditekan, bukan saat render.
+   */
+  ambilBahan?: () => Promise<string>;
+  /**
+   * Mode bertahap: dipanggil setiap satu bagian selesai, supaya slide bisa
+   * muncul di kanvas satu per satu tanpa menunggu seluruh dokumen.
+   */
+  onBagian?: (
+    blocks: ContentBlock[],
+    info: { indeks: number; total: number; judul: string },
+  ) => void;
   onPesan?: (pesan: string) => void;
   /** Mode placement hasil: ganti seluruh kanvas, atau tambahkan di akhir. */
   mode?: "ganti" | "tambah";
@@ -57,6 +75,8 @@ export function AutoGenerate({
   mode = "ganti",
   onMode,
   onHasil,
+  ambilBahan,
+  onBagian,
   onPesan,
   bisaUndoAuto = false,
   bisaRedoAuto = false,
@@ -71,6 +91,8 @@ export function AutoGenerate({
   const [sedang, setSedang] = useState(false);
   const [pesan, setPesan] = useState("");
   const [galat, setGalat] = useState("");
+  /** true = kerangka lalu per bagian (tidak terpotong); false = satu permintaan. */
+  const [bertahap, setBertahap] = useState(true);
 
   const jalankan = async () => {
     if (!prompt.trim()) {
@@ -83,28 +105,55 @@ export function AutoGenerate({
     }
     setSedang(true);
     setGalat("");
-    setPesan("Menyusun dokumen dari prompt...");
+    setPesan(bertahap ? "Menyusun kerangka dokumen..." : "Menyusun dokumen dari prompt...");
     try {
-      const hasil = await generateOtomatis({
+      const dasar = {
         provider: providerId,
         model: modelId,
         apiKey: apiKey.trim(),
         ...(baseUrl ? { baseUrl } : {}),
         prompt: prompt.trim(),
-        judul: judul.trim() || undefined,
+        // "Ganti kanvas" = dokumen baru, jadi judul lama tidak boleh menang
+        // (dulu judul template ikut terbawa ke laporan baru). Pada mode
+        // "Tambahkan", judul yang ada justru dipertahankan.
+        judul: mode === "tambah" ? judul.trim() || undefined : undefined,
         gaya,
         ...(persona ? { persona } : {}),
         jumlahBagian,
         allowRich,
-      });
-      onHasil(hasil);
+      };
+
+      // Bahan dari berkas terlampir ikut dikirim — tanpa ini, berkas yang
+      // dilampirkan pengguna hanya muncul sebagai nama di halaman sumber.
+      const bahan = ambilBahan ? await ambilBahan().catch(() => "") : "";
+
+      const hasil = bertahap
+        ? await generateBertahap({
+            ...dasar,
+            bahan,
+            onKemajuan: (p) => setPesan(p),
+            ...(onBagian ? { onBagian } : {}),
+          })
+        : await generateOtomatis(dasar);
+
+      // Pada mode bertahap, blok sudah ditempatkan per bagian; jangan
+      // menimpa kanvas sekali lagi.
+      onHasil(hasil, { sudahDiKanvas: bertahap && Boolean(onBagian) });
+
       const s = hasil.statistik;
+      const bagianGagal =
+        (hasil as { bagianGagal?: number[] }).bagianGagal ?? [];
+      const gagal =
+        bagianGagal.length > 0
+          ? ` — ${bagianGagal.length} bagian gagal, sisanya tetap dibuat`
+          : "";
       setPesan(
         `Selesai: ${s.totalBlok} blok (${s.heading} heading, ${s.daftar} daftar` +
           `${s.tabel ? `, ${s.tabel} tabel` : ""}` +
           `${s.grafik ? `, ${s.grafik} grafik` : ""}` +
           `${s.diagram ? `, ${s.diagram} diagram` : ""})` +
-          `${s.dibuang ? ` — ${s.dibuang} blok cacat dibuang.` : "."}`,
+          `${s.dibuang ? ` — ${s.dibuang} blok cacat dibuang` : ""}` +
+          `${gagal} · mutu bahasa ${hasil.kualitas.skor}/100.`,
       );
       onPesan?.(`Auto-generate selesai: ${s.totalBlok} blok.`);
     } catch (e) {
@@ -164,6 +213,38 @@ export function AutoGenerate({
           onChange={(v) => setJumlahBagian(Number(v))}
         />
       </div>
+
+      <div
+        className="ag-segmen"
+        role="radiogroup"
+        aria-label="Cara menyusun dokumen"
+      >
+        <button
+          type="button"
+          role="radio"
+          aria-checked={bertahap}
+          className={bertahap ? "aktif" : ""}
+          onClick={() => setBertahap(true)}
+          title="Kerangka dulu, lalu tiap bagian ditulis terpisah — tidak terpotong"
+        >
+          Bertahap (lengkap)
+        </button>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={!bertahap}
+          className={!bertahap ? "aktif" : ""}
+          onClick={() => setBertahap(false)}
+          title="Satu permintaan untuk seluruh dokumen — lebih cepat, bisa terpotong"
+        >
+          Sekali jalan
+        </button>
+      </div>
+      <p className="ag-deskripsi">
+        {bertahap
+          ? "Dokumen disusun per bagian sampai selesai; tiap bagian langsung masuk kanvas."
+          : "Seluruh dokumen dalam satu permintaan — cepat, tetapi bisa terpotong pada dokumen panjang."}
+      </p>
 
       <label className="ag-centang">
         <input
