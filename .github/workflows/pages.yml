@@ -35,26 +35,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: "Deploy Github/pnpm-lock.yaml"
 
+      # npm sengaja dipakai di sini (bukan pnpm): mirror punya lockfile
+      # sendiri dan `cache: pnpm` memicu pembacaan workspace akar repo.
       - name: Pasang dependensi
         working-directory: "Deploy Github"
         env:
           # Puppeteer hanya dipakai skrip verifikasi lokal, bukan build web.
           PUPPETEER_SKIP_DOWNLOAD: "true"
-        run: pnpm install --no-frozen-lockfile
+        run: npm install --no-audit --no-fund --legacy-peer-deps
 
       - name: Build Vite
         working-directory: "Deploy Github"
-        run: pnpm build
+        run: npm run build
 
       - name: Siapkan Pages
         uses: actions/configure-pages@v5

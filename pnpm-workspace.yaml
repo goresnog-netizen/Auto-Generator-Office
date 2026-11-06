@@ -1,3 +1,8 @@
+# pnpm 9 (dipakai CI) mewajibkan field `packages`; tanpa ini
+# `pnpm store path` gagal dengan "packages field missing or empty".
+packages:
+  - "."
+
 # Build script yang boleh dijalankan pnpm saat instalasi.
 #
 # - esbuild: wajib, dipakai skrip verifikasi untuk bundling generator.
@@ -9,9 +14,6 @@
 #
 #   Kalau kamu tak ingin Chromium terunduh sama sekali di mesin lokal,
 #   set PUPPETEER_SKIP_DOWNLOAD=1 sebelum `pnpm install`.
-allowBuilds:
-  esbuild: true
-  puppeteer: true
 onlyBuiltDependencies:
   - esbuild
   - puppeteer
