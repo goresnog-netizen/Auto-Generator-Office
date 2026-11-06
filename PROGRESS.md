@@ -952,7 +952,7 @@ UI: pilihan **Bertahap (lengkap)** / **Sekali jalan**, bawaan bertahap.
 - Workflow baru `.github/workflows/pages.yml`: build mirror `Deploy Github/`
   dengan npm murni, unggah artefak, deploy Pages. Gratis untuk repo public.
 - Pages di-set `build_type: workflow` (bukan legacy Jekyll) supaya build
-  cabang tidak menimpa hasil部署 Actions.
+  cabang tidak menimpa hasil Actions.
 - `pnpm-workspace.yaml` ditambahi `packages: ["."]` — pnpm 9 di CI menolak
   file tanpa field itu ("packages field missing or empty").
 
