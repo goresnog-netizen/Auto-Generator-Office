@@ -15,7 +15,23 @@ on:
   push:
     branches: [main]
     paths:
+      # Folder tempat Vite membangun hasil akhir.
       - "Deploy Github/**"
+      # Konfigurasi build Vite (ada di akar + di-copy ke mirror saat sync).
+      - "vite.config.ts"
+      - "index.html"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "package-lock.json"
+      # Konfigurasi Docker (Dockerfile/docker-compose tidak mengubah build
+      # tapi perlu trigger agar dokumentasi Docker di README/INSTALL ikut update).
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - ".dockerignore"
+      # README + INSTALL di-root (di-copy ke mirror saat sync).
+      - "README.md"
+      - "INSTALL.md"
+      # Workflow itu sendiri.
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
