@@ -925,3 +925,16 @@ UI: pilihan **Bertahap (lengkap)** / **Sekali jalan**, bawaan bertahap.
   isi + 1 tabel lanjutan, penutup), tanpa error runtime.
 - `npx vitest run` → 148 tes (11 berkas) lulus; typecheck 3 konfigurasi 0 error;
   `npm run build` sukses; `audit-gap-beser` 33/33; `verifikasi-siring` 10/10.
+
+### Publikasi (Sesi 9)
+
+- Repo baru: **https://github.com/goresnog-netizen/Auto-Generator-Office**
+  (GitHub menormalisasi "Auto Generator Office" menjadi `Auto-Generator-Office`;
+  judul persisnya ada di README dan deskripsi repo).
+- Branch `main`, commit `6f1e920`, riwayat lokal ikut terdorong (14 commit).
+- Repo dibuat **private**. README akar baru berisi ringkasan fitur & perintah.
+- Artefak lokal (`.workbuddy-ai/`, `.xena/`, `testrun-*`, `*.pptx`, `.tmp-*`)
+  dimasukkan ke `.gitignore` — tetap ada di disk, tidak dikirim ke repo.
+- Konektor GitHub bawaan sesi ini menolak membuat repo (403) karena berupa
+  GitHub App dengan cakupan terbatas; pembuatan/push memakai kredensial git
+  yang tersimpan di Windows Credential Manager.
