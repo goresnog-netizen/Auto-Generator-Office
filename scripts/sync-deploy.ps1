@@ -69,7 +69,7 @@ foreach ($r in $relatifTarget) {
 # Kalau suatu saat file sumber diubah ke import STATIK, build mirror akan
 # pecah ("cannot find module") - itu yang dicegah oleh
 # `scripts/verifikasi-fitur-deckcraft.mjs`.
-foreach ($nama in @("index.html", "vite.config.ts", "package.json", "tsconfig.json", "vercel.json")) {
+foreach ($nama in @("index.html", "vite.config.ts", "package.json", "tsconfig.json", "vercel.json", "README.md", "INSTALL.md", "LICENSE", "Dockerfile", "docker-compose.yml", ".dockerignore")) {
   $asal = Join-Path $Akar $nama
   if (Test-Path $asal) {
     Copy-Item -Path $asal -Destination (Join-Path $target $nama) -Force
