@@ -19,13 +19,27 @@ Diterbitkan otomatis lewat `.github/workflows/pages.yml`; GitHub Pages tidak ber
 | **Diagram** | Mermaid dirender jadi PNG 2400 px dengan warna mengikuti tema deck |
 | **Ekspor** | DOCX · PDF · PPTX · XLSX · `.mmd` · PNG infografis · DeckCraft Studio |
 
-## Mulai cepat
+## Mulai cepat — Node.js terunduh otomatis
+
+**Tidak perlu pasang Node.js dulu.** Installer memeriksa Node dan mengunduh
+Node LTS resmi (dengan verifikasi SHA256) bila belum ada. `npm` sudah termasuk
+di dalamnya. Rincian ada di [`INSTALL.md`](INSTALL.md).
+
+| Platform | Pasang | Jalankan |
+| --- | --- | --- |
+| Windows | klik dua kali `setup.bat` | klik dua kali `start.bat` |
+| Linux/macOS | `./start.sh install` | `./start.sh` |
+
+Aplikasi terbuka di `http://localhost:5173`.
+
+Kalau Node sudah terpasang dan Anda ingin memakai pnpm seperti pengembangan
+utama:
 
 ```bash
 pnpm install
-pnpm dev        # http://localhost:5173
-pnpm test       # vitest
-pnpm typecheck  # browser + Node + server
+pnpm dev
+pnpm test
+pnpm typecheck
 pnpm build
 ```
 

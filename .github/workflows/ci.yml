@@ -52,6 +52,10 @@ jobs:
   generators:
     name: Generator menulis berkas nyata
     runs-on: ubuntu-latest
+    env:
+      # Ubuntu runner sudah membawa Google Chrome. Variabel ini dipakai
+      # Puppeteer bila skrip verifikasi tidak membaca config/ di bawah.
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
     steps:
       - uses: actions/checkout@v4
 
@@ -67,10 +71,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Mermaid CLI + Chrome. Chromium TIDAK diunduh (PUPPETEER_SKIP_DOWNLOAD),
-      # jadi runner Linux pakai Chrome for Testing milik Puppeteer sendiri.
-      - name: Siapkan mermaid-cli
-        run: pnpm exec mmdc --version || true
+      # `config/puppeteer.config.json` sengaja TIDAK di-commit (berisi path
+      # Chrome milik mesin pengembang). Tanpa berkas ini mermaid-cli jatuh ke
+      # fallback .mmd, dan verifikasi diagram gagal membaca SVG.
+      - name: Siapkan Chrome untuk mermaid-cli
+        run: |
+          mkdir -p config
+          printf '%s\n' '{"headless":true,"args":["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"],"executablePath":"/usr/bin/google-chrome"}' > config/puppeteer.config.json
+          pnpm exec mmdc --version || true
 
       - name: Generator (struktur & validitas berkas)
         run: node scripts/verifikasi-generators.mjs

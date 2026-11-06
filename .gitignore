@@ -130,3 +130,8 @@ testrun-*/
 .tmp-*
 tmp-*
 *.pptx
+
+# Bootstrap Node: skrip installer ikut di-commit, hasil unduhannya tidak.
+!start.ps1
+!scripts/bootstrap-node.sh
+.runtime/
