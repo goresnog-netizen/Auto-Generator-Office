@@ -1,0 +1,76 @@
+# Deploy aplikasi statis ke GitHub Pages (GRATIS untuk repo public).
+#
+# Yang dibangun adalah mirror `Deploy Github/` — bukan akar repo — karena
+# mirror inilah yang memang disiapkan untuk hosting statis (tanpa `server/`).
+# `vite.config.ts` memakai `base: "./"` supaya aset tetap ketemu di bawah
+# path project site `/Auto-Generator-Office/`.
+#
+# Catatan: DeckCraft Studio butuh API Node lokal; di Pages panel itu akan
+# menampilkan "tidak tersedia". Fitur lain (editor, ekspor browser, tema PPT)
+# berjalan penuh karena seluruhnya sisi klien.
+
+name: GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Deploy Github/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build situs statis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: "Deploy Github/pnpm-lock.yaml"
+
+      - name: Pasang dependensi
+        working-directory: "Deploy Github"
+        env:
+          # Puppeteer hanya dipakai skrip verifikasi lokal, bukan build web.
+          PUPPETEER_SKIP_DOWNLOAD: "true"
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build Vite
+        working-directory: "Deploy Github"
+        run: pnpm build
+
+      - name: Siapkan Pages
+        uses: actions/configure-pages@v5
+
+      - name: Unggah artefak
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "Deploy Github/dist"
+
+  deploy:
+    name: Terbitkan ke Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

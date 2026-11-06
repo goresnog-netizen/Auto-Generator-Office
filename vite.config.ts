@@ -37,6 +37,10 @@ async function muatApiDeckcraft(): Promise<Plugin | null> {
 export default defineConfig(async () => {
   const api = await muatApiDeckcraft();
   return {
+    // Aset relatif: hasil build bisa dibuka dari subdirektori mana pun
+    // (GitHub Pages /Auto-Generator-Office/, Vercel, atau folder lokal).
+    // Tanpa ini, Vite menulis "/assets/…" yang putus di Pages project site.
+    base: "./",
     plugins: api ? [react(), api] : [react()],
     resolve: {
       alias: {
