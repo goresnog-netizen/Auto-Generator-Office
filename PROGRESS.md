@@ -966,3 +966,40 @@ UI: pilihan **Bertahap (lengkap)** / **Sekali jalan**, bawaan bertahap.
 - Di hosting statis, `/api/deckcraft/status` memang 404 — DeckCraft Studio
   menampilkan "Tidak tersedia". Perilaku ini sudah didokumentasikan di
   `vite.config.ts`; seluruh fitur lain berjalan di sisi klien.
+
+---
+
+## Sesi 11 — Installer unduh Node otomatis + CI hijau
+
+### Bootstrap Node (permintaan pengguna)
+"Pengguna ketika install langsung mendownload Node juga." Sekarang benar:
+
+- `scripts/bootstrap-node.ps1` (Windows) dan `.sh` (Linux/macOS):
+  1. cek `node --version` >= 20 -> kalau cukup, **tidak mengunduh apa pun**;
+  2. pakai lagi unduhan di `.runtime/node/` bila ada;
+  3. kalau belum, ambil `SHASUMS256.txt` dari `nodejs.org/dist/latest-v22.x`,
+     pilih arsip sesuai OS/arsitektur, unduh, **verifikasi SHA256**, ekstrak.
+- `start.ps1` / `start.sh` / `setup.bat` / `start.bat`: bootstrap ->
+  `npm install` -> `npm run build` atau `npm run dev`. **npm sudah termasuk
+  dalam arsip Node**, jadi tidak ada package manager tambahan yang diunduh.
+- `.runtime/` diabaikan git; tidak ada perubahan PATH permanen, tidak butuh
+  hak administrator; `NITZ_NODE_DIST` bisa memilih rilis lain.
+- Skrip Windows sengaja ASCII-only: PS 5.1 membaca `.ps1` sebagai ANSI, dan
+  tanda kutip lengkung dari UTF-8 mengakhiri string lebih awal (parser error).
+  Temuan ini didapat dari uji parser nyata.
+- `Invoke-Npm` menurunkan `$ErrorActionPreference` sementara: PS 5.1 menganggap
+  stderr Vite (peringatan chunk >500 kB) sebagai error fatal.
+
+**Uji nyata:** unduh paksa dengan minimum versi 99 -> `node-v22.23.4-win-x64.zip`,
+checksum cocok, `node v22.23.4 / npm 10.9.9`; pemakaian ulang cache lolos;
+`start.ps1 -Mode install` menyelesaikan `vite build` dengan exit 0.
+
+### CI akhirnya hijau
+- `typescript@6.0.3` ditambahkan ke `devDependencies` -- pnpm runner kini
+  menemukan `tsc` (sebelumnya cuma dependensi transitif, bin-nya tak ter-link).
+- Job `generators` menulis `config/puppeteer.config.json` yang menunjuk Chrome
+  bawaan runner Ubuntu. Tanpa berkas itu mermaid-cli jatuh ke fallback `.mmd`
+  dan verifikasi diagram gagal membaca SVG.
+- Hasil run `002f18d`: **3 job CI sukses** (Typecheck/test/build, Generator
+  berkas nyata, Perintah vs engine DeckCraft) dan **GitHub Pages sukses**.
+- Situs live tetap HTTP 200.
