@@ -71,6 +71,31 @@ Dibutuhkan **hanya pada kali pertama** (unduh Node + `npm install`). Setelah
 itu `.runtime/` dan `node_modules/` membuat instalasi bisa dipakai ulang
 tanpa unduhan baru.
 
+## Docker - VPS atau hosting dengan Docker
+
+Mulai semua layanan (frontend statis + DeckCraft API) dalam satu container:
+
+```bash
+docker compose up --build   # build + jalan
+docker compose up           # jalan ulang (tanpa rebuild)
+docker compose down         # hentikan
+```
+
+Buka **http://localhost:8090**
+
+Docker build otomatis:
+- Mengunduh DeckCraft CLI untuk Linux x64 ke dalam image
+- Tidak butuh Node.js atau pnpm di host (semuanya di dalam container)
+- Port default: **8090** (DeckCraft API aktif)
+
+Untuk pakai port lain, edit `docker-compose.yml` atau set `PORT`:
+
+```bash
+PORT=8080 docker compose up
+```
+
+---
+
 ## Gangguan umum
 
 | Gejala | Penyebab / solusi |

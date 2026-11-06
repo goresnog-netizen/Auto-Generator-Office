@@ -19,18 +19,19 @@ Diterbitkan otomatis lewat `.github/workflows/pages.yml`; GitHub Pages tidak ber
 | **Diagram** | Mermaid dirender jadi PNG 2400 px dengan warna mengikuti tema deck |
 | **Ekspor** | DOCX · PDF · PPTX · XLSX · `.mmd` · PNG infografis · DeckCraft Studio |
 
-## Mulai cepat — Node.js terunduh otomatis
+## Mulai cepat
 
-**Tidak perlu pasang Node.js dulu.** Installer memeriksa Node dan mengunduh
-Node LTS resmi (dengan verifikasi SHA256) bila belum ada. `npm` sudah termasuk
-di dalamnya. Rincian ada di [`INSTALL.md`](INSTALL.md).
+**Tidak perlu pasang Node.js dulu** — tiga jalur tersedia:
 
 | Platform | Pasang | Jalankan |
 | --- | --- | --- |
+| **Docker** (VPS, produksi) | `docker compose up --build` | `http://localhost:8090` — DeckCraft API aktif |
 | Windows | klik dua kali `setup.bat` | klik dua kali `start.bat` |
 | Linux/macOS | `./start.sh install` | `./start.sh` |
 
-Aplikasi terbuka di `http://localhost:5173`.
+**Docker** adalah satu-satunya jalur yang mengaktifkan **DeckCraft Studio** (deck PowerPoint native dari Rust) karena butuh server Node. Jalur Windows/Linux standalone hanya menjalankan dev server.
+
+Setelah dokumen tersusun, pilih tema di panel **Ekspor** lalu tekan **Ekspor PPT**.
 
 Kalau Node sudah terpasang dan Anda ingin memakai pnpm seperti pengembangan
 utama:
@@ -52,13 +53,15 @@ Setelah dokumen tersusun, pilih tema di panel **Ekspor** lalu tekan **Ekspor PPT
 ## Struktur penting
 
 ```
+Dockerfile / docker-compose.yml  self-host dengan DeckCraft API aktif
+server/serve.ts                server produksi (statis + API DeckCraft)
 src/lib/bahasa.ts            spesifikasi bahasa, perbaikan ejaan, skor mutu
 src/lib/auto-generate.ts     generateOtomatis() + generateBertahap()
 src/lib/ppt-desain.ts        9 tema, layout slide, gradien, infografis
 src/lib/mermaid-gambar.ts    Mermaid → PNG
-src/lib/exporter.ts          jalur ekspor browser
-src/generators/              generator Node (DOCX/PPTX/XLSX/PDF/Diagram)
-Deploy Github/               mirror bersih untuk Vercel (disinkronkan via npm run sync:deploy)
+src/lib/exporter.ts           jalur ekspor browser
+src/generators/               generator Node (DOCX/PPTX/XLSX/PDF/Diagram)
+Deploy Github/                mirror bersih untuk Vercel (disinkronkan via npm run sync:deploy)
 docs/                        AUTO-GENERATE.md, BAHASA-DAN-DESAIN-PPT.md, INTEGRASI-DECKCRAFT.md
 ```
 
