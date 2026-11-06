@@ -938,3 +938,31 @@ UI: pilihan **Bertahap (lengkap)** / **Sekali jalan**, bawaan bertahap.
 - Konektor GitHub bawaan sesi ini menolak membuat repo (403) karena berupa
   GitHub App dengan cakupan terbatas; pembuatan/push memakai kredensial git
   yang tersimpan di Windows Credential Manager.
+
+---
+
+## Sesi 10 — Repo public + GitHub Pages (gratis)
+
+- Repo diubah jadi **public**: https://github.com/goresnog-netizen/Auto-Generator-Office
+- **Live:** https://goresnog-netizen.github.io/Auto-Generator-Office/ (HTTP 200,
+  seluruh UI termuat: galeri, kanvas, panel Ekspor, Tema presentasi,
+  Mutu bahasa, Auto-Generate bertahap).
+- `vite.config.ts` diberi `base: "./"` agar aset tidak putus di subpath Pages
+  (`/Auto-Generator-Office/`); hasil build memakai `./assets/...`.
+- Workflow baru `.github/workflows/pages.yml`: build mirror `Deploy Github/`
+  dengan npm murni, unggah artefak, deploy Pages. Gratis untuk repo public.
+- Pages di-set `build_type: workflow` (bukan legacy Jekyll) supaya build
+  cabang tidak menimpa hasil部署 Actions.
+- `pnpm-workspace.yaml` ditambahi `packages: ["."]` — pnpm 9 di CI menolak
+  file tanpa field itu ("packages field missing or empty").
+
+### Catatan yang jujur
+- Workflow **CI** lama masih merah karena dua masalah yang sudah ada
+  sebelumnya, bukan karena Pages: (1) `typescript` tidak terdaftar di
+  devDependencies sehingga `pnpm exec tsc` tidak ketemu di runner pnpm;
+  (2) `verifikasi-generators.mjs` mencoba membaca `uji-diagram.svg` yang
+  tidak pernah ditulis karena mermaid-cli tidak punya Chrome di CI.
+  Keduanya tidak memengaruhi situs statis dan bisa diperbaiki terpisah.
+- Di hosting statis, `/api/deckcraft/status` memang 404 — DeckCraft Studio
+  menampilkan "Tidak tersedia". Perilaku ini sudah didokumentasikan di
+  `vite.config.ts`; seluruh fitur lain berjalan di sisi klien.

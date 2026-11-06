@@ -4,6 +4,9 @@
 
 Satu permintaan + bahan yang dilampirkan → dokumen lengkap tersusun per bagian → ekspor Word / PDF / PPTX / Excel / Diagram.
 
+**Demo langsung (gratis, tanpa akun):** https://goresnog-netizen.github.io/Auto-Generator-Office/
+Diterbitkan otomatis lewat `.github/workflows/pages.yml`; GitHub Pages tidak berbayar untuk repo public.
+
 ---
 
 ## Kenapa ini berbeda
