@@ -47,7 +47,21 @@ export class GalatDeckcraft extends Error {
 }
 
 async function json<T>(resp: Response): Promise<T> {
+  const tipe = resp.headers.get("content-type") ?? "";
   if (!resp.ok) {
+    // GitHub Pages mengembalikan 404 + HTML untuk rute yang tak dikenal.
+    // Itu berarti API-nya MEMANG tidak ada, bukan "API ada tapi binary
+    // DeckCraft belum terpasang". Tanpa pemeriksaan ini, panel menampilkan
+    // saran `pnpm vendor:deckcraft` yang mustahil dilakukan di hosting web.
+    if (
+      !tipe.includes("application/json") &&
+      (resp.status === 404 || resp.status === 405)
+    ) {
+      throw new GalatDeckcraft(
+        "Server ini tidak menyediakan API DeckCraft (dapat halaman HTML, bukan JSON).",
+        404,
+      );
+    }
     let pesan = `Permintaan gagal (${resp.status}).`;
     try {
       const data = (await resp.json()) as { galat?: string };
@@ -57,10 +71,9 @@ async function json<T>(resp: Response): Promise<T> {
     }
     throw new GalatDeckcraft(pesan, resp.status);
   }
-  // Hosting statis (mis. Vercel) bisa mengembalikan halaman HTML untuk
-  // rute yang tak dikenal. Itu bukan API — laporkan sebagai galat 404
+  // Hosting statis (mis. Vercel) bisa mengembalikan HTTP 200 + halaman HTML
+  // untuk rute yang tak dikenal. Itu bukan API — laporkan sebagai galat 404
   // supaya UI bisa menjelaskan penyebabnya, bukan "Unexpected token '<'".
-  const tipe = resp.headers.get("content-type") ?? "";
   if (!tipe.includes("application/json")) {
     throw new GalatDeckcraft(
       "Server ini tidak menyediakan API DeckCraft (dapat halaman HTML, bukan JSON).",
