@@ -238,14 +238,26 @@ export function DeckCraftStudio({
           {apiTanpaServer ? (
             <>
               <p>
-                Server ini tidak menjalankan API DeckCraft. DeckCraft adalah
-                program native (Rust), jadi butuh proses Node — hosting
-                statis seperti Vercel tak bisa menjalankannya.
+                Halaman web ini (GitHub Pages / Vercel) hanya menyajikan
+                berkas statis. DeckCraft adalah program native (Rust) yang
+                membutuhkan proses Node lewat <code>/api/deckcraft/*</code>,
+                sehingga tidak dapat berjalan di hosting statis.
               </p>
               <p>
-                Opsi: jalankan <code>pnpm serve</code> di komputer ini
-                (server produksi di port 8090), atau deploy ke host
-                ber-Node (Railway, Render, VPS, Docker).
+                Untuk memakainya, jalankan aplikasi di komputer sendiri:
+                <code>setup.bat</code> lalu <code>start.bat</code> (Windows)
+                atau <code>./start.sh</code> (Linux/macOS). Node terunduh
+                otomatis. Bila binary DeckCraft belum ada, jalankan
+                <code>pnpm vendor:deckcraft</code> sekali. Alternatif lain:
+                <code>pnpm serve</code> (server produksi port 8090),
+                <code>npm run serve</code>, atau host ber-Node
+                (Railway, Render, VPS, Docker).
+              </p>
+              <p className="dc-catatan">
+                Tidak perlu DeckCraft untuk hasil presentasi: tombol
+                <strong> Ekspor PPT </strong> di panel ini sudah menghasilkan
+                deck lengkap langsung di browser (tema, KPI, tabel dan grafik
+                native, diagram Mermaid, gradien).
               </p>
             </>
           ) : (
@@ -261,8 +273,8 @@ export function DeckCraftStudio({
           )}
           {status?.galat && <code className="dc-galat-detail">{status.galat}</code>}
           <p className="dc-catatan">
-            Sisa fitur NitZ-909 (template, editor, ekspor PPTX/DOCX/XLSX/PDF)
-            tetap berfungsi tanpa DeckCraft.
+            Fitur lain (template, editor, ekspor DOCX/XLSX/PDF/Diagram,
+            mutu bahasa) tetap berfungsi tanpa DeckCraft.
           </p>
         </div>
       ) : (
