@@ -50,6 +50,22 @@ export default defineConfig(async () => {
     server: {
       open: false,
     },
+    build: {
+      chunkSizeWarningLimit: 1200,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes("node_modules")) {
+              if (id.includes("pptxgenjs")) return "pptxgenjs";
+              if (id.includes("docx")) return "docx";
+              if (id.includes("exceljs")) return "exceljs";
+              if (id.includes("mermaid")) return "mermaid";
+              if (id.includes("d3")) return "d3";
+            }
+          },
+        },
+      },
+    },
     test: {
       // `Deploy Github/` adalah salinan mirror untuk hosting statis. Berkas
       // ujinya identik dengan yang di `src/`, jadi tanpa pengecualian ini
