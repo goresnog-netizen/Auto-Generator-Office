@@ -19,16 +19,22 @@ WORKDIR /app
 
 # Hanya berkas yang dibutuhkan Vite yang disalin lebih dulu agar cache
 # layer tetap berguna saat kode berubah.
+#
+# Catatan: repo ini TIDAK punya `public/` maupun `tsconfig.app.json`.
+# `vite.config.ts` mengimpor `server/deckcraft-api.ts` secara dinamis di
+# dalam try/catch, jadi tahap build tetap jalan tanpa folder `server/`.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY tsconfig.json tsconfig.app.json vite.config.ts index.html ./
+COPY tsconfig.json vite.config.ts index.html ./
 COPY src ./src
-COPY public ./public
 
-# npm dipakai (bukan pnpm) supaya tidak perlu Corepack di dalam image.
-# Puppeteer tidak diunduh: hanya dipakai skrip verifikasi lokal.
+# pnpm dipakai (bukan `npm install`) supaya versi dependensi sama persis
+# dengan CI: `pnpm-lock.yaml` adalah sumber kebenaran. `npm install` akan
+# mengabaikan lockfile itu dan me-resolve ulang, sehingga hasil build di
+# image bisa berbeda dari hasil build yang lolos tes.
 ENV PUPPETEER_SKIP_DOWNLOAD=true
-RUN npm install --no-audit --no-fund --legacy-peer-deps \
- && npm run build
+RUN npm install -g pnpm@9 --no-audit --no-fund \
+ && pnpm install --frozen-lockfile \
+ && pnpm exec vite build
 
 # ---------------------------------------------------------------------------
 # Tahap 2 — image produksi
@@ -66,9 +72,13 @@ RUN set -eux; \
     deckcraft-cli --version
 
 # --- Aplikasi ---
+# `server/deckcraft-api.ts` mengimpor nilai dari `src/lib/deckcraft.ts`,
+# `src/lib/deckcraft-ppt.ts`, dan `src/types/`. Semuanya hanya memakai modul
+# bawaan Node, jadi `node_modules` TIDAK perlu ikut ke image runtime —
+# `node --experimental-strip-types` menjalankan .ts langsung.
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/node_modules ./node_modules
 COPY server ./server
+COPY src ./src
 COPY package.json ./
 
 ENV PORT=8090
