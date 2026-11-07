@@ -3588,7 +3588,7 @@ function AppInner() {
           <Card>
             <SectionHeader
               judul="Tema presentasi"
-              deskripsi="Palet, tipografi, latar, dan tata letak slide untuk ekspor PPTX."
+              deskripsi="Palet, tipografi, latar, dan tata letak slide untuk ekspor PPTX. 6 tema terbaru dirancang untuk laporan TNI."
             />
             <Select
               label="Desain deck"
@@ -3604,6 +3604,7 @@ function AppInner() {
             />
             {(() => {
               const tema = TEMA_PPT.find((t) => t.id === temaPpt) ?? TEMA_PPT[0];
+              const isTni = tema.id.startsWith("tni-");
               return (
                 <>
                   <div
@@ -3644,6 +3645,28 @@ function AppInner() {
                   >
                     {tema.deskripsi}
                   </p>
+                  {isTni && (
+                    <p
+                      style={{
+                        margin: "var(--space-1) 0 0",
+                        fontSize: "var(--font-size-caption)",
+                        color: "var(--muted)",
+                        lineHeight: 1.4,
+                        background: "var(--surface-2)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "var(--radius-md)",
+                        padding: "var(--space-2)",
+                      }}
+                    >
+                      Tema TNI siap dipakai untuk semua jenis laporan militer.
+                      {temaPpt === "tni-darat" && " Warna hijau zamrud + emas bintang — cocok untuk laporan operasi darat."}
+                      {temaPpt === "tni-biru" && " Biru cakrabhuana + emas — briefing pagi dan paparan komandan."}
+                      {temaPpt === "tni-upacara" && " Putih + navy + emas — upacara dan acara resmi dengan branding TNI."}
+                      {temaPpt === "tni-situasi" && " Merah putih Indonesia — peta situasi dan laporan harian TNI."}
+                      {temaPpt === "tni-angkasa" && " Biru angkasa gelap — komando出动 dan operasi aerospace."}
+                      {temaPpt === "tni-darat-malam" && " Hitam + hijau gelap — operasi malam hari, visibilitas minimal."}
+                    </p>
+                  )}
                 </>
               );
             })()}

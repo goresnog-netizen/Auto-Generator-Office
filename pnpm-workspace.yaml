@@ -3,6 +3,9 @@
 packages:
   - "."
 
+allowBuilds:
+  esbuild: set this to true or false
+
 # Build script yang boleh dijalankan pnpm saat instalasi.
 #
 # - esbuild: wajib, dipakai skrip verifikasi untuk bundling generator.
