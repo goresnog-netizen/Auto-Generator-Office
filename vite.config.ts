@@ -51,22 +51,26 @@ export default defineConfig(async () => {
       open: false,
     },
     build: {
-      chunkSizeWarningLimit: 1200,
+      chunkSizeWarningLimit: 2000,
       rollupOptions: {
         output: {
           manualChunks(id) {
             if (id.includes("node_modules")) {
-              if (id.includes("pptxgenjs")) return "pptxgenjs";
-              if (id.includes("docx")) return "docx";
-              if (id.includes("exceljs")) return "exceljs";
-              if (id.includes("mermaid")) return "mermaid";
-              if (id.includes("d3")) return "d3";
+              if (
+                id.includes("pptxgenjs") ||
+                id.includes("docx") ||
+                id.includes("exceljs") ||
+                id.includes("pdfkit")
+              ) {
+                return "office-generators";
+              }
             }
           },
         },
       },
     },
     test: {
+      pool: "forks",
       // `Deploy Github/` adalah salinan mirror untuk hosting statis. Berkas
       // ujinya identik dengan yang di `src/`, jadi tanpa pengecualian ini
       // vitest menjalankan setiap tes dua kali dan jumlah tesnya menipu.
