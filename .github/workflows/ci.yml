@@ -144,3 +144,65 @@ jobs:
 
       - name: Uji blok kode ber-font monospace
         run: node --experimental-strip-types scripts/verifikasi-kode-deckcraft.mts
+
+  # Membuktikan Dockerfile benar-benar menghasilkan image yang jalan.
+  #
+  # Ini penting karena Dockerfile tidak bisa diuji di mesin pengembangan
+  # berbasis Windows tanpa Docker: URL rilis DeckCraft, ketergantungan glibc
+  # (Alpine/musl gagal), dan path binary di dalam arsip hanya bisa
+  # dibuktikan di dalam container Linux sungguhan.
+  docker:
+    name: Image Docker jalan & DeckCraft aktif
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t nitz-909:ci .
+
+      - name: Jalankan container
+        run: |
+          docker run -d --name nitz-909-ci -p 8090:8090 nitz-909:ci
+          echo "menunggu container siap..."
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8090/ > /dev/null 2>&1; then
+              echo "siap setelah ${i} percobaan"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "container tidak pernah merespons:"
+          docker logs nitz-909-ci
+          exit 1
+
+      - name: Halaman utama tersaji
+        run: |
+          kode=$(curl -s -o /tmp/index.html -w '%{http_code}' http://127.0.0.1:8090/)
+          echo "HTTP $kode"
+          test "$kode" = "200"
+          grep -qi '<div id="root"' /tmp/index.html
+
+      - name: Binary DeckCraft ada dan bisa dijalankan
+        run: |
+          docker exec nitz-909-ci deckcraft-cli --version
+          docker exec nitz-909-ci test -x /usr/local/bin/deckcraft-cli
+
+      - name: API DeckCraft melaporkan tersedia
+        run: |
+          curl -fsS http://127.0.0.1:8090/api/deckcraft/status | tee /tmp/status.json
+          node -e "
+            const s = require('/tmp/status.json');
+            if (s.tersedia !== true) {
+              console.error('DeckCraft TIDAK tersedia di dalam image:', s.galat ?? '(tanpa pesan)');
+              process.exit(1);
+            }
+            console.log('DeckCraft versi', s.versi, '| tema:', (s.tema ?? []).length);
+          "
+
+      - name: Log container saat gagal
+        if: failure()
+        run: docker logs nitz-909-ci || true
+
+      - name: Bersihkan
+        if: always()
+        run: docker rm -f nitz-909-ci || true
