@@ -53,6 +53,8 @@ scripts/*
 !scripts/verify-templates.mjs
 !scripts/diff-presentasi.mjs
 !scripts/vendor-deckcraft.ps1
+!scripts/vendor-deckcraft.sh
+!scripts/vendor-deckcraft.mjs
 !scripts/verify-api.mjs
 !scripts/verify-ui.mjs
 !scripts/verify-deckcraft.mts

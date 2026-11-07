@@ -29,7 +29,20 @@ Diterbitkan otomatis lewat `.github/workflows/pages.yml`; GitHub Pages tidak ber
 | Windows | klik dua kali `setup.bat` | klik dua kali `start.bat` |
 | Linux/macOS | `./start.sh install` | `./start.sh` |
 
-**Docker** adalah satu-satunya jalur yang mengaktifkan **DeckCraft Studio** (deck PowerPoint native dari Rust) karena butuh server Node. Jalur Windows/Linux standalone hanya menjalankan dev server.
+### DeckCraft Studio (opsional, tapi ini yang menghasilkan PPTX native)
+
+DeckCraft adalah program Rust terpisah. Tanpa binary-nya, aplikasi tetap
+berfungsi penuh untuk DOCX/PDF/XLSX/PPTX sisi browser, tetapi panel
+**DeckCraft Studio** menampilkan "tidak tersedia".
+
+| Jalur | Cara mengaktifkan |
+| --- | --- |
+| Docker | otomatis — binary sudah di dalam image |
+| Windows / Linux / macOS | `npm run vendor:deckcraft` (unduh + verifikasi SHA-256) |
+
+`vendor:deckcraft` memilih skrip yang benar sendiri: PowerShell di Windows,
+bash di Linux/macOS. Hasilnya masuk ke `vendors/deckcraft-bin/app/` sesuai
+jalur yang dicari aplikasi, jadi tidak perlu mengeset `DECKCRAFT_CLI` manual.
 
 Setelah dokumen tersusun, pilih tema di panel **Ekspor** lalu tekan **Ekspor PPT**.
 

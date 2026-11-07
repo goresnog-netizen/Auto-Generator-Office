@@ -18,10 +18,24 @@
 [CmdletBinding()]
 param(
   [string]$Versi = "0.8.0",
-  [string]$Akar = (Split-Path -Parent $PSScriptRoot)
+  # Sengaja kosong: `$PSScriptRoot` belum terisi saat nilai default parameter
+  # dievaluasi di Windows PowerShell 5.1, sehingga `Split-Path -Parent ""`
+  # langsung melempar "Cannot bind argument to parameter 'Path'". Nilai
+  # sebenarnya ditentukan di badan skrip (lihat di bawah).
+  [string]$Akar = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($Akar)) {
+  $Akar = if ($PSScriptRoot) {
+    Split-Path -Parent $PSScriptRoot
+  } else {
+    # Cadangan: skrip ada di <akar>/scripts, jadi naik satu tingkat dari cwd
+    # bila dipanggil dari akar proyek.
+    (Get-Location).Path
+  }
+}
 
 $folderBin = Join-Path $Akar "vendors\deckcraft-bin"
 $folderApp = Join-Path $folderBin "app"

@@ -73,7 +73,18 @@ tanpa unduhan baru.
 
 ## Docker - VPS atau hosting dengan Docker
 
-Mulai semua layanan (frontend statis + DeckCraft API) dalam satu container:
+### Pakai image siap pakai (tanpa build)
+
+Setiap tag rilis menerbitkan image ke GHCR, jadi tidak perlu build sendiri:
+
+```bash
+docker run -d --name nitz-909 -p 8090:8090 \
+  ghcr.io/goresnog-netizen/auto-generator-office:latest
+```
+
+Versi tertentu: ganti `latest` dengan nomor versi, mis. `0.1.0`.
+
+### Build dari sumber
 
 ```bash
 docker compose up --build   # build + jalan
@@ -103,6 +114,19 @@ docker compose up -d          # jalan di latar belakang
 docker compose logs -f        # lihat log
 docker compose ps             # cek status healthcheck
 ```
+
+### DeckCraft tanpa Docker
+
+Di Windows, Linux, dan macOS, binary bisa diunduh ke folder proyek:
+
+```bash
+npm run vendor:deckcraft
+```
+
+Skrip memilih PowerShell (Windows) atau bash (Linux/macOS), mengunduh arsip
+resmi sesuai OS/arsitektur, memverifikasi SHA-256, lalu mengekstraknya ke
+`vendors/deckcraft-bin/app/`. Setelah itu `pnpm dev` langsung mendeteksi
+binary-nya tanpa perlu mengeset `DECKCRAFT_CLI`.
 
 ---
 

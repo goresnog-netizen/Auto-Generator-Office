@@ -1,0 +1,110 @@
+name: Release
+
+# Dipicu oleh tag versi, mis.:
+#   git tag v0.1.0
+#   git push origin v0.1.0
+#
+# Yang dihasilkan:
+#   1. GitHub Release dengan catatan rilis otomatis dari commit sejak tag
+#      sebelumnya.
+#   2. Image Docker di GHCR, sehingga pengguna bisa langsung:
+#        docker run -p 8090:8090 ghcr.io/goresnog-netizen/auto-generator-office:0.1.0
+#      tanpa perlu build sendiri (build butuh unduhan ~78 MB binary DeckCraft).
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag yang akan dirilis (mis. v0.1.0). Harus sudah ada."
+        required: true
+
+permissions:
+  contents: write # membuat GitHub Release
+  packages: write # mendorong image ke GHCR
+
+jobs:
+  # Pastikan tag benar-benar ada dan formatnya vX.Y.Z sebelum apa pun dibuat.
+  validasi:
+    name: Validasi tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.t.outputs.tag }}
+      versi: ${{ steps.t.outputs.versi }}
+    steps:
+      - id: t
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Tag '$TAG' tidak sesuai format vX.Y.Z" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "versi=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "Tag valid: $TAG"
+
+  rilis:
+    name: Buat GitHub Release
+    needs: validasi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # perlu riwayat untuk catatan rilis
+
+      - name: Buat release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.validasi.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG sudah ada, tidak dibuat ulang."
+            exit 0
+          fi
+          gh release create "$TAG" \
+            --title "Auto Generator Office $TAG" \
+            --generate-notes \
+            --verify-tag
+
+  # Image Docker dipublikasikan supaya pengguna tidak perlu build sendiri.
+  # Ini satu-satunya jalur yang mengaktifkan DeckCraft Studio (butuh Node +
+  # binary Rust), jadi image-nya layak dibagikan.
+  docker:
+    name: Terbitkan image ke GHCR
+    needs: validasi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # GHCR menolak nama dengan huruf besar; repo ini "Auto-Generator-Office".
+      - name: Normalisasi nama image
+        id: img
+        run: |
+          nama="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          echo "nama=$nama" >> "$GITHUB_OUTPUT"
+          echo "Image: ghcr.io/$nama"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & dorong
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ steps.img.outputs.nama }}:${{ needs.validasi.outputs.versi }}
+            ghcr.io/${{ steps.img.outputs.nama }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.validasi.outputs.versi }}
+            org.opencontainers.image.description=Auto Generator Office — NitZ-909
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

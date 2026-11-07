@@ -11,7 +11,7 @@
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.server.json",
     "format": "prettier --write .",
-    "vendor:deckcraft": "powershell -ExecutionPolicy Bypass -File scripts/vendor-deckcraft.ps1",
+    "vendor:deckcraft": "node scripts/vendor-deckcraft.mjs",
     "serve": "node --experimental-strip-types server/serve.ts",
     "verify:deckcraft": "node scripts/verify-deckcraft.mts",
     "verify:deckcraft:api": "node scripts/verify-api.mjs",
