@@ -1099,3 +1099,65 @@ dua kali dan angka "148 tes" yang tertulis di dokumentasi **tidak benar**.
 | unit test | 81 lulus / 7 berkas |
 | build Vite | sukses |
 | Docker image + DeckCraft | terbukti jalan di CI |
+
+---
+
+## Sesi 14 — Vendoring lintas platform + rilis v0.1.0
+
+### Vendor DeckCraft akhirnya jalan di semua OS
+Sebelumnya hanya ada `vendor-deckcraft.ps1`, dan `package.json` memanggilnya
+lewat shell Windows. Artinya di Linux dan macOS perintah itu **selalu gagal**.
+Dua bug ditemukan saat pengujian:
+
+| Bug | Bukti |
+| --- | --- |
+| `[string]$Akar = (Split-Path -Parent $PSScriptRoot)` di blok `param` | PS 5.1 mengevaluasi nilai default parameter sebelum `$PSScriptRoot` terisi → `Cannot bind argument to parameter 'Path' because it is an empty string`. Jadi perintah ini juga tidak pernah jalan di Windows. |
+| Skrip bash melaporkan sukses walau binary gagal dieksekusi | `LAPORAN="$(... || true)"` membuat keluaran galat tetap dianggap "ada output". Sekarang kode keluar diperiksa dan kegagalan exec → exit 1 dengan diagnosis. |
+
+Yang ditambahkan:
+- `scripts/vendor-deckcraft.sh` — Linux (x86_64, aarch64) dan macOS
+  (universal). Memilih arsip sesuai `uname`, memverifikasi SHA-256 terhadap
+  `SHA256SUMS.txt` rilis yang sama (bukan nilai yang ditanam di skrip),
+  mengekstrak ke `vendors/deckcraft-bin/app/` sesuai jalur yang dicari
+  `defaultBinPath()`, `chmod +x`, dan melepas atribut karantina di macOS.
+- `scripts/vendor-deckcraft.mjs` — dispatcher; memilih skrip sesuai
+  `process.platform`. `vendor:deckcraft` kini memanggil ini.
+- `.gitignore` — `scripts/*` diabaikan dengan pengecualian eksplisit, dua
+  skrip baru perlu didaftarkan (tanpa ini berkasnya tidak pernah ter-commit).
+
+**Uji nyata (Windows):** `npm run vendor:deckcraft` →
+`deckcraft-cli 0.8.0`, checksum `5fbcf18b…`.
+**Uji nyata (jalur Linux, `uname` diakali):** arsip `linux-x86_64` terunduh,
+checksum `227b8c9c…` cocok, ekstraksi ke `app/deckcraft-0.8.0-linux-x86_64/`,
+lalu gagal di tahap eksekusi dengan pesan yang tepat karena host-nya Windows.
+**Uji nyata server lokal:** `GET /api/deckcraft/status` →
+`{"tersedia":true,"versi":"deckcraft-cli 0.8.0","tema":[8 tema]}`.
+
+### Rilis v0.1.0
+- `.github/workflows/release.yml`: tag `vX.Y.Z` →
+  1. **validasi** format tag;
+  2. **GitHub Release** dengan catatan otomatis (`--generate-notes`);
+  3. **image Docker ke GHCR** (tag versi + `latest`), sehingga pengguna tidak
+     perlu build sendiri — build butuh unduhan ~78 MB binary DeckCraft.
+- Nama image dinormalisasi ke huruf kecil: GHCR menolak `Auto-Generator-Office`.
+
+Hasil run `42348344853`: ketiga job sukses.
+- Release: https://github.com/goresnog-netizen/Auto-Generator-Office/releases/tag/v0.1.0
+- Image: `ghcr.io/goresnog-netizen/auto-generator-office:0.1.0` dan `:latest`
+  (digest `sha256:923e5b7f…`), terverifikasi **bisa di-pull anonim**
+  (`tags/list` HTTP 200 tanpa kredensial).
+
+### Dokumentasi
+- README: badge CI/Release/License, perintah `docker run` dari GHCR, dan
+  koreksi klaim "Docker satu-satunya jalur DeckCraft" — sekarang vendor lokal
+  juga mengaktifkannya.
+- INSTALL: bagian "pakai image siap pakai" dan "DeckCraft tanpa Docker".
+
+### Status akhir
+| Item | Status |
+| --- | --- |
+| CI (check, generators, deckcraft, docker) | sukses |
+| GitHub Pages | sukses, HTTP 200 |
+| Release v0.1.0 | terbit |
+| Image GHCR | publik, bisa di-pull |
+| typecheck / unit test | 0 error / 81 lulus |

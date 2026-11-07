@@ -1,11 +1,22 @@
 # Auto Generator Office
 
+[![CI](https://github.com/goresnog-netizen/Auto-Generator-Office/actions/workflows/ci.yml/badge.svg)](https://github.com/goresnog-netizen/Auto-Generator-Office/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/goresnog-netizen/Auto-Generator-Office?display_name=tag)](https://github.com/goresnog-netizen/Auto-Generator-Office/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 **NitZ-909** — dari bahan mentah menjadi laporan siap saji dan deck PowerPoint profesional, tanpa disunting ulang.
 
 Satu permintaan + bahan yang dilampirkan → dokumen lengkap tersusun per bagian → ekspor Word / PDF / PPTX / Excel / Diagram.
 
 **Demo langsung (gratis, tanpa akun):** https://goresnog-netizen.github.io/Auto-Generator-Office/
 Diterbitkan otomatis lewat `.github/workflows/pages.yml`; GitHub Pages tidak berbayar untuk repo public.
+
+**Versi lengkap dengan DeckCraft Studio (Docker, tanpa build):**
+
+```bash
+docker run -d --name nitz-909 -p 8090:8090 \
+  ghcr.io/goresnog-netizen/auto-generator-office:latest
+```
 
 ---
 
