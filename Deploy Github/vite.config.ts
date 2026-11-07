@@ -50,5 +50,15 @@ export default defineConfig(async () => {
     server: {
       open: false,
     },
+    test: {
+      // `Deploy Github/` adalah salinan mirror untuk hosting statis. Berkas
+      // ujinya identik dengan yang di `src/`, jadi tanpa pengecualian ini
+      // vitest menjalankan setiap tes dua kali dan jumlah tesnya menipu.
+      exclude: [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/Deploy Github/**",
+      ],
+    },
   };
 });

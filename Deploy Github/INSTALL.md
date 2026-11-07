@@ -84,14 +84,24 @@ docker compose down         # hentikan
 Buka **http://localhost:8090**
 
 Docker build otomatis:
-- Mengunduh DeckCraft CLI untuk Linux x64 ke dalam image
+- Mengunduh DeckCraft CLI resmi (`storytold/deckcraft` v0.8.0) untuk Linux x64
+- **Memverifikasi SHA-256** arsip terhadap `SHA256SUMS.txt` rilis yang sama;
+  kalau tidak cocok, build berhenti
+- Memasang fonta sistem (DejaVu + Liberation) supaya teks slide tidak jadi
+  kotak kosong saat dirender
 - Tidak butuh Node.js atau pnpm di host (semuanya di dalam container)
-- Port default: **8090** (DeckCraft API aktif)
 
-Untuk pakai port lain, edit `docker-compose.yml` atau set `PORT`:
+**Kenapa image-nya Debian, bukan Alpine:** binary DeckCraft ditautkan ke
+`ld-linux-x86-64.so.2` (glibc). Di Alpine (musl) binary gagal dijalankan
+dengan pesan "not found" yang menyesatkan. Karena itu `node:22-slim` dipakai.
+
+Ganti port publik lewat `docker-compose.yml` (bagian `ports`), mis.
+`"8080:8090"` untuk membuka di port 8080 sementara container tetap 8090.
 
 ```bash
-PORT=8080 docker compose up
+docker compose up -d          # jalan di latar belakang
+docker compose logs -f        # lihat log
+docker compose ps             # cek status healthcheck
 ```
 
 ---

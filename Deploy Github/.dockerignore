@@ -1,29 +1,56 @@
+# Konteks build Docker — jaga tetap kecil dan hanya berisi yang dibutuhkan.
+#
+# PENTING: jangan mengecualikan `vite.config.ts`, `tsconfig*.json`, atau
+# `index.html`. Tahap build di Dockerfile menyalin berkas itu dan `vite build`
+# akan gagal tanpa mereka.
+
+# --- Dependensi & hasil build lokal ---
 node_modules
 dist
+Deploy Github
+
+# --- Repositori & metadata ---
 .git
+.gitignore
 .github
+
+# --- Sumber Rust DeckCraft (ratusan berkas, tidak dipakai build web) ---
+deckcraft
+vendors
+
+# --- Artefak sesi kerja ---
 .workbuddy-ai
 .xena
 testrun-*
 .tmp-*
 tmp-*
+*.log
+dash*.log
+
+# --- Berkas bantu di akar yang tidak dipakai image ---
+*.txt
+*.py
+*.cjs
+*.png
+*.zip
+
+# --- Berkas rahasia ---
+.env
+.env.*
+*.pem
+*.key
+
+# --- Berkas Docker itu sendiri ---
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# --- Dokumentasi (tidak dibutuhkan saat runtime) ---
+*.md
+
+# --- Berkas uji tidak perlu masuk image ---
 *.test.ts
 *.test.tsx
 *.spec.ts
 *.spec.tsx
 vitest.config.ts
-tsconfig.json
-tsconfig.app.json
-tsconfig.node.json
-vite.config.ts
-.eslintrc
-.prettierrc
-.gitignore
-.env*
-Dockerfile
-docker-compose*
-.dockerignore
-*.md
-!package.json
-!package-lock.json
-!pnpm-lock.yaml

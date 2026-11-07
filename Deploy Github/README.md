@@ -62,12 +62,24 @@ src/lib/mermaid-gambar.ts    Mermaid → PNG
 src/lib/exporter.ts           jalur ekspor browser
 src/generators/               generator Node (DOCX/PPTX/XLSX/PDF/Diagram)
 Deploy Github/                mirror bersih untuk Vercel (disinkronkan via npm run sync:deploy)
-docs/                        AUTO-GENERATE.md, BAHASA-DAN-DESAIN-PPT.md, INTEGRASI-DECKCRAFT.md
+docs/                         dokumentasi teknis (lihat daftar di bawah)
 ```
+
+### Dokumentasi
+
+| Berkas | Isi |
+| --- | --- |
+| [`docs/SPESIFIKASI-PRODUK.md`](docs/SPESIFIKASI-PRODUK.md) | prompt induk / spesifikasi awal produk |
+| [`docs/AUTO-GENERATE.md`](docs/AUTO-GENERATE.md) | mode Bertahap dan Sekali jalan |
+| [`docs/BAHASA-DAN-DESAIN-PPT.md`](docs/BAHASA-DAN-DESAIN-PPT.md) | profil ragam bahasa, tema, layout slide |
+| [`docs/DIAGRAM-MERMAID.md`](docs/DIAGRAM-MERMAID.md) | Mermaid → PNG, warna mengikuti tema |
+| [`docs/INTEGRASI-DECKCRAFT.md`](docs/INTEGRASI-DECKCRAFT.md) | jembatan DeckCraft, batasan hosting statis |
+| [`docs/CI-DAN-VERIFIKASI.md`](docs/CI-DAN-VERIFIKASI.md) | workflow CI, skrip audit |
+| [`docs/arsip/`](docs/arsip) | laporan build & review lama (historis, tidak diperbarui) |
 
 ## Verifikasi
 
-- `pnpm test` — 148 tes lulus
+- `pnpm test` — 81 tes lulus di 7 berkas
 - `pnpm typecheck` — 0 error (3 konfigurasi)
 - `pnpm build` — sukses
 - `node scripts/audit-gap-beser.mjs` — 33/33

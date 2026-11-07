@@ -68,18 +68,45 @@ export interface DeckcraftInfo {
   galat?: string;
 }
 
-/** Lokasi default binary. Bisa dioverride lewat environment DECKCRAFT_CLI. */
+/**
+ * Lokasi default binary. Bisa dioverride lewat environment DECKCRAFT_CLI.
+ *
+ * Tiap platform punya nama folder & nama berkas berbeda:
+ *   Windows  vendors/deckcraft-bin/app/deckcraft-0.8.0-windows-x64-portable/deckcraft-cli.exe
+ *   Linux    vendors/deckcraft-bin/app/deckcraft-0.8.0-linux-x86_64/bin/deckcraft-cli
+ *   macOS    vendors/deckcraft-bin/app/deckcraft-cli-0.8.0-macos-universal/deckcraft-cli
+ *
+ * Sebelumnya fungsi ini hanya menunjuk jalur Windows, sehingga instalasi
+ * Linux/macOS (termasuk container Docker) selalu melaporkan "binary tidak
+ * ditemukan" meski berkasnya ada.
+ */
 export function defaultBinPath(): string {
   const dariEnv = process.env.DECKCRAFT_CLI?.trim();
   if (dariEnv) return dariEnv;
+
   const akar = process.cwd();
+  const app = path.join(akar, "vendors", "deckcraft-bin", "app");
+
+  if (process.platform === "win32") {
+    return path.join(
+      app,
+      "deckcraft-0.8.0-windows-x64-portable",
+      "deckcraft-cli.exe",
+    );
+  }
+  if (process.platform === "darwin") {
+    return path.join(
+      app,
+      "deckcraft-cli-0.8.0-macos-universal",
+      "deckcraft-cli",
+    );
+  }
+  // Linux: arsip resmi menaruh binary di dalam subfolder bin/.
   return path.join(
-    akar,
-    "vendors",
-    "deckcraft-bin",
-    "app",
-    "deckcraft-0.8.0-windows-x64-portable",
-    "deckcraft-cli.exe",
+    app,
+    "deckcraft-0.8.0-linux-x86_64",
+    "bin",
+    "deckcraft-cli",
   );
 }
 

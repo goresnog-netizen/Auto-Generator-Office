@@ -10,28 +10,32 @@
 #   docker compose down
 #
 # Catatan:
-#   - PORT default 8090 (harus sesuai dengan deklarasi di client).
-#   - DeckCraft CLI sudah termasuk di image (download otomatis di Dockerfile).
-#   - Tidak butuh volume持久化; semua data di memori browser pengguna.
-#   - healthcheck memastikan container siap sebelum open browser.
+#   - PORT default 8090 (sama dengan yang dipakai client di browser).
+#   - DeckCraft CLI sudah termasuk di image; diunduh saat build dan
+#     diverifikasi SHA-256 terhadap SHA256SUMS.txt rilis resmi.
+#   - Tidak butuh volume persisten: dokumen tersimpan di browser pengguna.
+#   - Healthcheck memakai Node (sudah ada di image), bukan wget/curl.
 
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
+    image: nitz-909:latest
     container_name: nitz-909
     ports:
-      # host → container
       - "8090:8090"
     environment:
-      # Port yang didengarkan server internal
       PORT: "8090"
       HOST: "0.0.0.0"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8090/"]
-      interval: 10s
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8090/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
       timeout: 5s
-      retries: 5
+      retries: 4
       start_period: 10s
