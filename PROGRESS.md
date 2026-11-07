@@ -1003,3 +1003,99 @@ checksum cocok, `node v22.23.4 / npm 10.9.9`; pemakaian ulang cache lolos;
 - Hasil run `002f18d`: **3 job CI sukses** (Typecheck/test/build, Generator
   berkas nyata, Perintah vs engine DeckCraft) dan **GitHub Pages sukses**.
 - Situs live tetap HTTP 200.
+
+---
+
+## Sesi 13 — Docker dibuktikan jalan + koreksi angka tes
+
+### Dockerfile versi pertama ternyata tidak akan pernah berhasil
+Versi yang di-commit di Sesi 12 dibuat tanpa akses ke Docker dan tanpa
+memeriksa sumber rilis. Tiga kesalahan fatal:
+
+| Masalah | Akibat |
+| --- | --- |
+| URL `nicholaswmin/deckcraft/...-musl.tar.gz` | repo & nama arsip tidak ada → build gagal |
+| Base image `node:22-alpine` (musl) | binary resmi ditautkan ke `ld-linux-x86-64.so.2` (glibc); di musl gagal "not found" |
+| `COPY public/` dan `COPY tsconfig.app.json` | keduanya **tidak ada** di repo → build gagal |
+
+### Yang diperbaiki
+- Sumber resmi: `storytold/deckcraft` v0.8.0,
+  `deckcraft-0.8.0-linux-x86_64.tar.gz`, diverifikasi SHA-256
+  (`227b8c9c…cb8f`) terhadap `SHA256SUMS.txt` rilis yang sama.
+  Checksum diunduh ulang dan dicocokkan secara lokal sebelum dipakai.
+- Base image `node:22-slim` (glibc). Ini wajib, bukan preferensi.
+- Binary dipasang ke `/usr/local/bin/deckcraft-cli` dari
+  `bin/deckcraft-cli` di dalam arsip (bukan `deckcraft`).
+- `DECKCRAFT_CLI` di-set agar `defaultBinPath()` menemukannya.
+- Fonta sistem (`fonts-dejavu-core`, `fonts-liberation`, `fontconfig`)
+  supaya teks slide tidak menjadi kotak kosong.
+- Tahap build memakai `pnpm install --frozen-lockfile` (bukan
+  `npm install`) agar versi dependensi identik dengan CI.
+- Runtime menyalin `src/` karena `server/deckcraft-api.ts` mengimpor nilai
+  dari `src/lib/deckcraft.ts`, `src/lib/deckcraft-ppt.ts`, `src/types/`.
+  `node_modules` tidak perlu: semuanya modul bawaan Node.
+- Healthcheck memakai Node, bukan `wget` yang tidak ada di slim.
+
+### Portabilitas aplikasi
+`defaultBinPath()` sebelumnya **hardcoded jalur Windows**
+(`deckcraft-0.8.0-windows-x64-portable/deckcraft-cli.exe`). Di Linux, macOS,
+dan Docker, panel DeckCraft selalu melaporkan "binary tidak ditemukan"
+meskipun berkasnya ada. Sekarang platform-aware:
+
+| Platform | Jalur |
+| --- | --- |
+| Windows | `vendors/deckcraft-bin/app/deckcraft-0.8.0-windows-x64-portable/deckcraft-cli.exe` |
+| Linux | `vendors/deckcraft-bin/app/deckcraft-0.8.0-linux-x86_64/bin/deckcraft-cli` |
+| macOS | `vendors/deckcraft-bin/app/deckcraft-cli-0.8.0-macos-universal/deckcraft-cli` |
+
+5 unit test baru (`src/lib/deckcraft-binpath.test.ts`) mengunci perilaku ini,
+termasuk memastikan jalur Linux tidak berakhiran `.exe`.
+
+### Job CI Docker — bukti, bukan asumsi
+`.github/workflows/ci.yml` mendapat job `docker` yang:
+1. `docker build` image;
+2. menjalankan container dan menunggu `/` merespons;
+3. memastikan HTTP 200 dan `<div id="root">` ada;
+4. menjalankan `deckcraft-cli --version` **di dalam** container;
+5. memanggil `GET /api/deckcraft/status` dan menuntut `tersedia: true`;
+6. mencetak log container saat gagal, selalu membersihkan container.
+
+Hasil nyata (run `3081018`):
+```
+HTTP 200
+deckcraft-cli 0.8.0
+{"tersedia":true,"versi":"deckcraft-cli 0.8.0",
+ "binPath":"/usr/local/bin/deckcraft-cli",
+ "tema":["DeckCraft","Harbor","Ember","Meadow","Nocturne","Paper",
+         "Coral Reef","Slate"],"galat":null}
+DeckCraft versi deckcraft-cli 0.8.0 | tema: 8
+```
+
+Job ini juga yang **menemukan** dua `COPY` yang gagal di percobaan pertama —
+persis alasan job ini dibuat.
+
+### Koreksi kejujuran: angka tes
+`vitest` ikut menjalankan berkas uji dari folder mirror `Deploy Github/`
+karena tidak ada konfigurasi `test.exclude`. Akibatnya setiap tes berjalan
+dua kali dan angka "148 tes" yang tertulis di dokumentasi **tidak benar**.
+
+- Angka sebenarnya: **81 tes di 7 berkas**.
+- `vite.config.ts` kini mengecualikan `**/Deploy Github/**`.
+- README diperbarui ke angka yang benar.
+
+### Perapian dokumentasi
+- 8 laporan build/review tertanggal 2026-10-14 dipindah ke `docs/arsip/`
+  (isinya semua "COMPLETE/SUCCESS", sudah tidak relevan tapi tetap disimpan).
+- `NitZ-909.md` (prompt induk) → `docs/SPESIFIKASI-PRODUK.md`.
+- Akar repo kini hanya `README.md`, `INSTALL.md`, `PROGRESS.md`.
+- README mendapat tabel indeks dokumentasi.
+
+### Status akhir
+| Item | Status |
+| --- | --- |
+| CI (4 job: check, generators, deckcraft, docker) | sukses |
+| GitHub Pages | sukses, HTTP 200 |
+| typecheck 3 konfigurasi | 0 error |
+| unit test | 81 lulus / 7 berkas |
+| build Vite | sukses |
+| Docker image + DeckCraft | terbukti jalan di CI |
